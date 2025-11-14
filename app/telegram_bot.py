@@ -50,10 +50,11 @@ def init_bot():
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
     
-    # Регистрация обработчиков
+    # Регистрация обработчиков (важен порядок - более специфичные первыми)
     dp.message.register(handle_start, Command("start"))
     dp.message.register(handle_reply, Command("reply"))
     dp.callback_query.register(handle_callback)
+    # Обработчик текстовых сообщений для FSM (должен быть последним)
     dp.message.register(handle_text_message)
     
     return bot, dp
@@ -142,6 +143,10 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext):
 async def handle_text_message(message: types.Message, state: FSMContext):
     """Обработчик текстовых сообщений (для FSM)."""
     if message.from_user.id != OWNER_TELEGRAM_ID:
+        return
+    
+    # Пропускаем, если это команда (она уже обработана другими обработчиками)
+    if message.text and message.text.startswith('/'):
         return
     
     current_state = await state.get_state()
@@ -310,8 +315,15 @@ async def send_notification(text: str, local_id: str = None):
 
 async def start_polling():
     """Запускает polling бота."""
-    if not bot or not dp:
-        init_bot()
+    global bot, dp
     
-    await dp.start_polling(bot)
+    if not bot or not dp:
+        bot, dp = init_bot()
+    
+    print("🔄 Запуск polling...")
+    try:
+        await dp.start_polling(bot, skip_updates=True)
+    except Exception as e:
+        print(f"❌ Ошибка при запуске polling: {e}")
+        raise
 

@@ -83,8 +83,11 @@ async def main():
     try:
         bot, dp = init_bot()
         print("✅ Telegram бот инициализирован")
+        print(f"✅ OWNER_TELEGRAM_ID: {os.getenv('OWNER_TELEGRAM_ID')}")
     except Exception as e:
         print(f"❌ Ошибка инициализации Telegram бота: {e}")
+        import traceback
+        traceback.print_exc()
         return
     
     # Загрузка аккаунтов
