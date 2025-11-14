@@ -97,9 +97,14 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
         
         mail = await loop.run_in_executor(None, imap_connect)
         
-        # Поиск непрочитанных писем
+        # Поиск непрочитанных писем (только новые, не старше 7 дней)
+        from datetime import datetime, timedelta
+        date_limit = (datetime.now() - timedelta(days=7)).strftime("%d-%b-%Y")
+        
         def imap_search():
-            status, messages = mail.search(None, "UNSEEN")
+            # Ищем только непрочитанные письма за последние 7 дней
+            search_criteria = f'(UNSEEN SINCE {date_limit})'
+            status, messages = mail.search(None, search_criteria)
             return status, messages
         
         status, messages = await loop.run_in_executor(None, imap_search)
@@ -112,6 +117,11 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
             return []
         
         email_ids = messages[0].split()
+        
+        # Ограничиваем количество писем за раз (максимум 10)
+        email_ids = email_ids[:10]
+        
+        print(f"Найдено новых писем: {len(email_ids)}")
         
         for email_id_bytes in email_ids:
             try:
@@ -156,6 +166,12 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
                 
                 EMAIL_CACHE[local_id] = email_data
                 new_emails.append(email_data)
+                
+                # Помечаем письмо как прочитанное, чтобы не обрабатывать его снова
+                def mark_as_read():
+                    mail.store(email_id, '+FLAGS', '\\Seen')
+                
+                await loop.run_in_executor(None, mark_as_read)
                 
                 # Отправка уведомления в Telegram
                 if telegram_notify_func:

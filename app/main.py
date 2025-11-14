@@ -39,11 +39,21 @@ async def email_checker_loop():
             # Проверяем оба аккаунта
             if "1" in accounts:
                 print(f"Проверка аккаунта 1...")
-                await check_account_emails(1, telegram_notify_func=send_notification)
+                try:
+                    emails = await check_account_emails(1, telegram_notify_func=send_notification)
+                    if emails:
+                        print(f"  Найдено новых писем: {len(emails)}")
+                except Exception as e:
+                    print(f"  Ошибка при проверке аккаунта 1: {e}")
             
             if "2" in accounts:
                 print(f"Проверка аккаунта 2...")
-                await check_account_emails(2, telegram_notify_func=send_notification)
+                try:
+                    emails = await check_account_emails(2, telegram_notify_func=send_notification)
+                    if emails:
+                        print(f"  Найдено новых писем: {len(emails)}")
+                except Exception as e:
+                    print(f"  Ошибка при проверке аккаунта 2: {e}")
             
             # Ждём перед следующей проверкой
             await asyncio.sleep(CHECK_INTERVAL)
