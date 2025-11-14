@@ -14,7 +14,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.storage import save_account, get_account, load_accounts
 from app.email_client import send_email_smtp, get_email_from_cache, test_imap_connection
-from app.ai_client import polish_reply, understand_user_intent, generate_friendly_response
+from app.ai_client import polish_reply, understand_user_intent, generate_friendly_response, suggest_reply_options
 from app.oauth_client import get_authorization_url, exchange_code_for_tokens, refresh_access_token
 
 # Глобальные переменные для бота
@@ -169,12 +169,133 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
             )
     elif data.startswith("quick_reply:"):
         local_id = data.split(":", 1)[1]
-        await callback.answer()
+        await callback.answer("🔄 Анализирую письмо...")
+        
+        # Получаем данные письма
+        email_data = get_email_from_cache(local_id)
+        if not email_data:
+            await callback.message.answer(
+                "❌ Письмо не найдено в кэше. Возможно, оно уже удалено."
+            )
+            return
+        
+        # Генерируем варианты ответов через AI
+        reply_options = suggest_reply_options(email_data)
+        
+        # Создаем клавиатуру с вариантами ответов
+        keyboard = InlineKeyboardBuilder()
+        
+        for i, suggestion in enumerate(reply_options.get("suggestions", [])[:3], 1):
+            # Ограничиваем длину текста для callback_data (64 символа максимум)
+            short_suggestion = suggestion[:50] if len(suggestion) > 50 else suggestion
+            keyboard.add(InlineKeyboardButton(
+                text=f"💡 Вариант {i}: {short_suggestion[:30]}...",
+                callback_data=f"use_reply:{local_id}:{i}"
+            ))
+        
+        keyboard.add(InlineKeyboardButton(
+            text="✏️ Написать свой ответ",
+            callback_data=f"custom_reply:{local_id}"
+        ))
+        
+        # Формируем сообщение
+        message_text = (
+            f"💬 Ответ на письмо\n\n"
+            f"📧 От: {email_data.get('from', 'Неизвестно')}\n"
+            f"📝 Тема: {email_data.get('subject', 'Без темы')}\n\n"
+            f"💡 {reply_options.get('context', 'Выберите вариант ответа или напишите свой')}\n\n"
+            f"Выберите вариант ответа или напишите свой:"
+        )
+        
         await callback.message.answer(
-            f"💬 Для ответа на это письмо используйте команду:\n\n"
-            f"`/reply {local_id} ваш текст ответа`\n\n"
-            f"Пример:\n"
-            f"`/reply {local_id} давайте созвонимся завтра`",
+            message_text,
+            reply_markup=keyboard.as_markup()
+        )
+        
+        # Сохраняем варианты ответов в state для последующего использования
+        await state.update_data(
+            reply_options=reply_options,
+            reply_local_id=local_id
+        )
+    
+    elif data.startswith("use_reply:"):
+        # Пользователь выбрал один из предложенных вариантов
+        parts = data.split(":")
+        local_id = parts[1]
+        option_num = int(parts[2])
+        
+        email_data = get_email_from_cache(local_id)
+        if not email_data:
+            await callback.answer("❌ Письмо не найдено", show_alert=True)
+            return
+        
+        data_state = await state.get_data()
+        reply_options = data_state.get("reply_options", {})
+        suggestions = reply_options.get("suggestions", [])
+        
+        if option_num <= len(suggestions):
+            selected_reply = suggestions[option_num - 1]
+            await callback.answer("✅ Отправляю ответ...")
+            
+            # Автоматически отправляем выбранный ответ
+            account_id = email_data["account_id"]
+            from_field = email_data["from"]
+            if "<" in from_field and ">" in from_field:
+                to_email = from_field.split("<")[-1].split(">")[0].strip()
+            else:
+                to_email = from_field.strip()
+            
+            subject = f"Re: {email_data['subject']}"
+            context = f"От: {email_data['from']}\nТема: {email_data['subject']}\n\n{email_data['body'][:500]}"
+            polished_reply = polish_reply(selected_reply, context)
+            
+            success, msg = await send_email_smtp(
+                account_id,
+                to_email,
+                subject,
+                polished_reply,
+                telegram_notify_func=send_notification
+            )
+            
+            if success:
+                success_msg = generate_friendly_response(
+                    f"Ответ успешно отправлен получателю {to_email}."
+                )
+                await callback.message.answer(
+                    f"✅ {success_msg}\n\n"
+                    f"📧 Получатель: {to_email}\n"
+                    f"📝 Отправленный текст:\n{polished_reply}"
+                )
+            else:
+                await callback.message.answer(f"❌ Ошибка при отправке: {msg}")
+        else:
+            await callback.answer("❌ Вариант не найден", show_alert=True)
+    
+    elif data.startswith("custom_reply:"):
+        # Пользователь хочет написать свой ответ
+        local_id = data.split(":", 1)[1]
+        await callback.answer()
+        
+        email_data = get_email_from_cache(local_id)
+        if not email_data:
+            await callback.message.answer("❌ Письмо не найдено в кэше.")
+            return
+        
+        # Сохраняем local_id для ответа
+        await state.update_data(custom_reply_id=local_id)
+        
+        help_text = generate_friendly_response(
+            f"Пользователь хочет написать свой ответ на письмо от {email_data.get('from', 'неизвестного отправителя')}. "
+            f"Нужно попросить его написать текст ответа и объяснить, что можно писать на русском, бот переведет в деловой английский."
+        )
+        
+        await callback.message.answer(
+            f"✏️ {help_text}\n\n"
+            f"📧 Письмо от: {email_data.get('from', 'Неизвестно')}\n"
+            f"📝 Тема: {email_data.get('subject', 'Без темы')}\n\n"
+            f"💡 Напишите ваш ответ (можно на русском, бот переведет в деловой английский):\n\n"
+            f"Или используйте команду:\n"
+            f"`/reply {local_id} ваш текст ответа`",
             parse_mode="Markdown"
         )
 

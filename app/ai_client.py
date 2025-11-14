@@ -204,3 +204,69 @@ def generate_friendly_response(context: str, user_message: str = None) -> str:
     except Exception as e:
         return "Понял! Продолжаем."
 
+
+def suggest_reply_options(email_data: dict) -> dict:
+    """
+    Генерирует варианты ответов на письмо через AI.
+    
+    Args:
+        email_data: Данные письма (from, subject, body, summary)
+        
+    Returns:
+        Словарь с вариантами ответов и подсказками:
+        {
+            "suggestions": ["вариант 1", "вариант 2", "вариант 3"],
+            "context": "контекст для пользователя",
+            "help_text": "подсказка как ответить"
+        }
+    """
+    if not client:
+        init_openai()
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """Ты помощник для ответа на письма. Анализируй письмо и предлагай 3 коротких варианта ответа на русском языке.
+Варианты должны быть разными по тону: один вежливый и формальный, один дружелюбный, один краткий.
+Также дай подсказку, что пользователь может написать свой ответ."""
+                },
+                {
+                    "role": "user",
+                    "content": f"""Письмо:
+От: {email_data.get('from', 'Неизвестно')}
+Тема: {email_data.get('subject', 'Без темы')}
+Резюме: {email_data.get('summary', '')}
+Текст (первые 500 символов): {email_data.get('body', '')[:500]}
+
+Предложи 3 варианта коротких ответов (по 1-2 предложения каждый) и подсказку.
+Ответ в формате JSON:
+{{
+    "suggestions": ["вариант 1", "вариант 2", "вариант 3"],
+    "context": "краткое описание письма и что нужно ответить",
+    "help_text": "подсказка как использовать"
+}}"""
+                }
+            ],
+            temperature=0.7,
+            max_tokens=400,
+            response_format={"type": "json_object"}
+        )
+        
+        import json
+        result = json.loads(response.choices[0].message.content.strip())
+        return result
+    except Exception as e:
+        print(f"Ошибка при генерации вариантов ответа: {e}")
+        return {
+            "suggestions": [
+                "Спасибо за письмо, рассмотрю.",
+                "Понял, свяжусь с вами.",
+                "Получил, отвечу позже."
+            ],
+            "context": "Письмо получено",
+            "help_text": "Напишите свой ответ или выберите вариант выше"
+        }
+
