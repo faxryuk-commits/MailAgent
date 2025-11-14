@@ -5,46 +5,52 @@
 import os
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from typing import Optional
-import uvicorn
 import httpx
+import pathlib
 
 # Импорты с обработкой ошибок для Vercel
+# На Vercel эти модули недоступны, работаем только через BACKEND_URL
+LOCAL_MODE = False
 try:
+    # Пытаемся импортировать локальные модули (только если доступны)
     from app.storage import load_accounts, get_account, save_account
     from app.email_client import get_email_from_cache, EMAIL_CACHE, send_email_smtp
     from app.ai_client import summarize_email, polish_reply, suggest_reply_options
     LOCAL_MODE = True
+    print("✅ Локальные модули загружены (режим Railway)")
 except ImportError as e:
-    # На Vercel эти модули недоступны, работаем только через BACKEND_URL
+    # На Vercel эти модули недоступны - это нормально
     LOCAL_MODE = False
-    print(f"Локальные модули недоступны, работаем через BACKEND_URL: {e}")
+    print(f"ℹ️  Локальные модули недоступны, работаем через BACKEND_URL (режим Vercel)")
+    # Создаем заглушки для переменных
+    EMAIL_CACHE = {}
 
 app = FastAPI(title="Mail Agent AI")
 
 # Настройка шаблонов
 # Для Vercel используем абсолютный путь
-import pathlib
-template_dir = pathlib.Path(__file__).parent / "templates"
-template_dir_str = str(template_dir.absolute())
-
-# Проверяем существование директории шаблонов
-if not template_dir.exists():
-    print(f"⚠️  Директория шаблонов не найдена: {template_dir_str}")
-    print(f"   Текущая директория: {os.getcwd()}")
-    print(f"   __file__: {__file__}")
-    # Пробуем альтернативный путь
-    alt_template_dir = pathlib.Path("app/templates")
-    if alt_template_dir.exists():
-        template_dir_str = str(alt_template_dir.absolute())
-        print(f"   Используем альтернативный путь: {template_dir_str}")
-    else:
-        print(f"   ⚠️  Альтернативный путь тоже не найден: {alt_template_dir.absolute()}")
-
-templates = Jinja2Templates(directory=template_dir_str)
-print(f"✅ Шаблоны загружены из: {template_dir_str}")
+try:
+    template_dir = pathlib.Path(__file__).parent / "templates"
+    template_dir_str = str(template_dir.absolute())
+    
+    # Проверяем существование директории шаблонов
+    if not template_dir.exists():
+        # Пробуем альтернативный путь (для Vercel)
+        alt_template_dir = pathlib.Path("app/templates")
+        if alt_template_dir.exists():
+            template_dir_str = str(alt_template_dir.absolute())
+        else:
+            # Последняя попытка - относительный путь
+            template_dir_str = "app/templates"
+    
+    templates = Jinja2Templates(directory=template_dir_str)
+    print(f"✅ Шаблоны загружены из: {template_dir_str}")
+except Exception as e:
+    print(f"⚠️  Ошибка настройки шаблонов: {e}")
+    # Создаем заглушку, чтобы приложение не упало
+    templates = None
 
 # URL бэкенда (Railway или другой сервер)
 # На Vercel это должен быть URL вашего Railway сервиса
@@ -79,6 +85,9 @@ async def index(request: Request):
                     recent_emails = data.get("emails", [])[:20]
         except Exception as e:
             print(f"Ошибка получения данных с бэкенда: {e}")
+    
+    if templates is None:
+        return HTMLResponse("<h1>Ошибка: шаблоны не загружены</h1>")
     
     return templates.TemplateResponse("index.html", {
         "request": request,
@@ -272,10 +281,15 @@ async def view_email(request: Request, local_id: str):
             print(f"Ошибка получения письма с бэкенда: {e}")
     
     if not email_data:
+        if templates is None:
+            return HTMLResponse("<h1>Письмо не найдено</h1>")
         return templates.TemplateResponse("error.html", {
             "request": request,
             "error": "Письмо не найдено"
         })
+    
+    if templates is None:
+        return HTMLResponse(f"<h1>Письмо</h1><pre>{email_data}</pre>")
     
     return templates.TemplateResponse("email.html", {
         "request": request,
@@ -286,7 +300,10 @@ async def view_email(request: Request, local_id: str):
 
 
 def run_web_app(host: str = "0.0.0.0", port: int = 8000):
-    """Запускает веб-приложение."""
-    import uvicorn
-    uvicorn.run(app, host=host, port=port)
+    """Запускает веб-приложение (только для локального запуска)."""
+    try:
+        import uvicorn
+        uvicorn.run(app, host=host, port=port)
+    except ImportError:
+        print("⚠️  uvicorn не установлен, веб-приложение не может быть запущено локально")
 

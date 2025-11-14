@@ -23,13 +23,19 @@ print(f"Current working directory: {os.getcwd()}")
 print(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
 print(f"sys.path: {sys.path[:3]}...")  # Первые 3 элемента
 
+# Подавляем предупреждения при импорте
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+
 try:
     # Импортируем FastAPI приложение
+    print("🔄 Импорт app.web_app...")
     from app.web_app import app
     
     # Vercel для Python ожидает ASGI приложение
     handler = app
     print("✅ FastAPI app успешно импортирован")
+    print(f"✅ BACKEND_URL: {os.getenv('BACKEND_URL', 'не установлен')}")
 except ImportError as e:
     # Детальная информация об ошибке импорта
     import traceback
