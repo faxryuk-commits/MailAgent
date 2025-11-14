@@ -11,6 +11,7 @@ from app.telegram_bot import init_bot, start_polling, send_notification
 from app.email_client import check_account_emails
 from app.storage import load_accounts
 from app.ai_client import init_openai
+from app.web_app import app as web_app
 
 # Интервал проверки почты (в секундах)
 CHECK_INTERVAL = 60  # 1 минута
@@ -111,6 +112,25 @@ async def main():
     print("\n🚀 Запуск сервиса...")
     print(f"📧 Проверка почты каждые {CHECK_INTERVAL} секунд")
     print("💬 Telegram бот готов к работе")
+    
+    # Проверяем, нужно ли запускать веб-приложение
+    web_enabled = os.getenv("WEB_ENABLED", "false").lower() == "true"
+    web_port = int(os.getenv("WEB_PORT", "8000"))
+    
+    if web_enabled:
+        print(f"🌐 Веб-интерфейс доступен на http://0.0.0.0:{web_port}")
+        # Запускаем веб-приложение в отдельном процессе
+        import threading
+        import uvicorn
+        
+        def run_web():
+            uvicorn.run(web_app, host="0.0.0.0", port=web_port, log_level="info")
+        
+        web_thread = threading.Thread(target=run_web, daemon=True)
+        web_thread.start()
+    else:
+        print("💡 Для включения веб-интерфейса установите WEB_ENABLED=true")
+    
     print("\nНажмите Ctrl+C для остановки\n")
     
     # Запуск задач

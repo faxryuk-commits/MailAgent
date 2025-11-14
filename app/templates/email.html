@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Письмо - Mail Agent AI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .back-btn {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: white;
+            text-decoration: none;
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        
+        .back-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .email-header {
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .email-header h1 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .email-meta {
+            display: grid;
+            gap: 10px;
+        }
+        
+        .email-meta div {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .email-meta strong {
+            color: #667eea;
+            min-width: 80px;
+        }
+        
+        .email-body {
+            line-height: 1.8;
+            white-space: pre-wrap;
+            margin: 20px 0;
+        }
+        
+        .reply-section {
+            margin-top: 30px;
+        }
+        
+        .reply-section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        .suggestions {
+            margin-bottom: 20px;
+        }
+        
+        .suggestion-btn {
+            display: block;
+            width: 100%;
+            background: #f7fafc;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.3s;
+        }
+        
+        .suggestion-btn:hover {
+            border-color: #667eea;
+            background: #edf2f7;
+        }
+        
+        .suggestion-btn strong {
+            color: #667eea;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: vertical;
+            margin-bottom: 15px;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+        
+        .btn-success {
+            background: #48bb78;
+        }
+        
+        .btn-success:hover {
+            background: #38a169;
+        }
+        
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .message-success {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        
+        .message-error {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-btn">← Назад к списку</a>
+        
+        <div class="card">
+            <div class="email-header">
+                <h1>{{ email.subject }}</h1>
+                <div class="email-meta">
+                    <div><strong>От:</strong> {{ email.from }}</div>
+                    <div><strong>Дата:</strong> {{ email.date }}</div>
+                    <div><strong>Аккаунт:</strong> {{ email.account_id }}</div>
+                </div>
+            </div>
+            
+            <div class="email-body">{{ email.body }}</div>
+            
+            <div style="background: #f7fafc; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                <strong>📝 Резюме:</strong>
+                <p style="margin-top: 10px;">{{ email.summary }}</p>
+            </div>
+        </div>
+        
+        <div class="card reply-section">
+            <h2>💬 Ответить на письмо</h2>
+            
+            {% if reply_options.suggestions %}
+            <div class="suggestions">
+                <p style="margin-bottom: 15px; color: #666;">💡 AI предлагает варианты ответов:</p>
+                {% for suggestion in reply_options.suggestions %}
+                <button class="suggestion-btn" onclick="useSuggestion('{{ suggestion|replace("'", "\\'") }}')">
+                    <strong>Вариант {{ loop.index }}:</strong>
+                    {{ suggestion }}
+                </button>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <form id="replyForm" onsubmit="sendReply(event)">
+                <textarea 
+                    id="replyText" 
+                    name="reply_text" 
+                    placeholder="Напишите ваш ответ (можно на русском, бот переведет в деловой английский)..."
+                    required
+                ></textarea>
+                
+                <input type="hidden" name="local_id" value="{{ email.local_id }}">
+                <input type="hidden" name="access_key" value="{{ access_key }}">
+                
+                <button type="submit" class="btn btn-success">📧 Отправить ответ</button>
+            </form>
+            
+            <div id="message"></div>
+        </div>
+    </div>
+    
+    <script>
+        function useSuggestion(text) {
+            document.getElementById('replyText').value = text;
+            document.getElementById('replyText').focus();
+        }
+        
+        async function sendReply(event) {
+            event.preventDefault();
+            
+            const form = event.target;
+            const formData = new FormData(form);
+            const messageDiv = document.getElementById('message');
+            
+            messageDiv.innerHTML = '<div class="message">🔄 Отправляю ответ...</div>';
+            
+            try {
+                const response = await fetch('/api/reply', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    messageDiv.innerHTML = `
+                        <div class="message message-success">
+                            ✅ ${data.message}
+                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">
+                                <strong>Отправленный текст:</strong>
+                                <pre style="margin-top: 10px; white-space: pre-wrap;">${data.polished_reply}</pre>
+                            </div>
+                        </div>
+                    `;
+                    form.reset();
+                } else {
+                    messageDiv.innerHTML = `<div class="message message-error">❌ Ошибка: ${data.detail || 'Неизвестная ошибка'}</div>`;
+                }
+            } catch (error) {
+                messageDiv.innerHTML = `<div class="message message-error">❌ Ошибка при отправке: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>
+

@@ -44,6 +44,11 @@ OPENAI_API_KEY=your_openai_api_key
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 GOOGLE_REDIRECT_URI=http://localhost:8080/callback
+
+# Опционально: веб-интерфейс
+WEB_ENABLED=true
+WEB_PORT=8000
+WEB_ACCESS_KEY=your-secret-key-here
 ```
 
 4. Запустите приложение:
