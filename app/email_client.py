@@ -51,8 +51,15 @@ def parse_email_date(date_str: str) -> str:
         email_date = parsedate_to_datetime(date_str)
         
         # Форматируем в читаемый вид (русская локаль)
-        now = datetime.now(email_date.tzinfo) if email_date.tzinfo else datetime.now()
-        diff = now - email_date.replace(tzinfo=None) if email_date.tzinfo else now - email_date
+        # Приводим к одному timezone для сравнения
+        if email_date.tzinfo:
+            now = datetime.now(email_date.tzinfo)
+            email_date_naive = email_date
+        else:
+            now = datetime.now()
+            email_date_naive = email_date
+        
+        diff = now - email_date_naive
         
         # Если письмо сегодня
         if diff.days == 0:
