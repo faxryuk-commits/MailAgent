@@ -24,7 +24,8 @@ template_dir = pathlib.Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(template_dir))
 
 # URL бэкенда (Railway или другой сервер)
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+# На Vercel это должен быть URL вашего Railway сервиса
+BACKEND_URL = os.getenv("BACKEND_URL", "")
 
 # Секретный ключ для доступа (можно вынести в env)
 WEB_ACCESS_KEY = os.getenv("WEB_ACCESS_KEY", "change-me-in-production")
@@ -130,7 +131,7 @@ async def send_reply(
         raise HTTPException(status_code=404, detail="Письмо не найдено")
     
     # Если есть бэкенд, отправляем через него
-    if BACKEND_URL and BACKEND_URL != "http://localhost:8000":
+    if BACKEND_URL:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
