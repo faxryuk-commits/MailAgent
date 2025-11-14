@@ -14,7 +14,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.storage import save_account, get_account, load_accounts
 from app.email_client import send_email_smtp, get_email_from_cache, test_imap_connection
-from app.ai_client import polish_reply
+from app.ai_client import polish_reply, understand_user_intent, generate_friendly_response
 from app.oauth_client import get_authorization_url, exchange_code_for_tokens, refresh_access_token
 
 # Глобальные переменные для бота
@@ -99,6 +99,11 @@ def check_owner(func):
 @check_owner
 async def handle_start(message: types.Message, **kwargs):
     """Обработчик команды /start."""
+    # Генерируем дружелюбное приветствие через AI
+    greeting = generate_friendly_response(
+        "Пользователь запустил бота. Нужно поприветствовать и предложить настроить почтовый аккаунт."
+    )
+    
     keyboard = InlineKeyboardBuilder()
     
     keyboard.add(InlineKeyboardButton(
@@ -119,7 +124,7 @@ async def handle_start(message: types.Message, **kwargs):
     ))
     
     await message.answer(
-        "👋 Добро пожаловать в Mail Agent AI!\n\n"
+        f"{greeting}\n\n"
         "Выберите аккаунт для настройки:",
         reply_markup=keyboard.as_markup()
     )
@@ -469,13 +474,43 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
 async def handle_reply(message: types.Message, **kwargs):
     """Обработчик команды /reply <ID> <текст>."""
     text = message.text.strip()
+    
+    # Пытаемся понять намерение через AI, если формат нестандартный
+    if not text.startswith('/reply'):
+        intent_data = understand_user_intent(
+            text,
+            current_state=None,
+            available_commands=["/reply <ID> <текст> - ответить на письмо"]
+        )
+        
+        if intent_data.get("intent") == "command" and intent_data.get("command") == "/reply":
+            # AI понял, что это команда reply
+            params = intent_data.get("parameters", {})
+            reply_id = params.get("id")
+            reply_text = params.get("text")
+            
+            if reply_id and reply_text:
+                # Используем параметры от AI
+                text = f"/reply {reply_id} {reply_text}"
+            else:
+                # Не удалось извлечь параметры
+                await message.answer(
+                    generate_friendly_response(
+                        "Пользователь хочет ответить на письмо, но не указал ID письма или текст ответа. Нужно вежливо попросить указать эти данные."
+                    )
+                )
+                return
+    
     parts = text.split(None, 2)  # /reply ID текст
     
     if len(parts) < 3:
+        friendly_error = generate_friendly_response(
+            "Пользователь использовал команду /reply неправильно. Нужно вежливо объяснить правильный формат."
+        )
         await message.answer(
-            "❌ Неверный формат команды.\n\n"
-            "Использование: /reply <ID> <текст ответа>\n\n"
-            "Пример: /reply 1-1234567890 давайте созвонимся завтра"
+            f"{friendly_error}\n\n"
+            "📝 Правильный формат: `/reply <ID> <текст ответа>`\n\n"
+            "Пример: `/reply 1-1234567890 давайте созвонимся завтра`"
         )
         return
     
