@@ -15,7 +15,7 @@
    OPENAI_API_KEY=...
    WEB_ENABLED=true
    WEB_PORT=$PORT
-   WEB_ACCESS_KEY=your-secret-key-here
+   WEB_ACCESS_KEY=your-secret-key-here  # Опционально: любая строка для защиты API (можно не задавать)
    ```
 3. Скопируйте URL вашего Railway сервиса (например: `https://your-app.railway.app`)
 
@@ -43,8 +43,8 @@
    vercel env add BACKEND_URL
    # Введите URL вашего Railway сервиса
    
-   vercel env add WEB_ACCESS_KEY
-   # Введите тот же ключ, что и в Railway
+   vercel env add WEB_ACCESS_KEY  # Опционально: любая строка (например: "my-secret-123")
+   # Если не задать, защита будет отключена (подходит для личного использования)
    ```
 
 ### Вариант B: Через GitHub (рекомендуется)
@@ -62,7 +62,7 @@
 
 3. Добавьте переменные окружения:
    - `BACKEND_URL` = URL вашего Railway сервиса (например: `https://your-app.railway.app`)
-   - `WEB_ACCESS_KEY` = ваш секретный ключ (тот же, что в Railway)
+   - `WEB_ACCESS_KEY` = опционально: любая строка для защиты API (можно не задавать)
    - `OPENAI_API_KEY` = ваш ключ OpenAI (для AI функций в веб-интерфейсе)
 
 4. Нажмите "Deploy"

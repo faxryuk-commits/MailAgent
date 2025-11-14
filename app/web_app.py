@@ -27,8 +27,9 @@ templates = Jinja2Templates(directory=str(template_dir))
 # На Vercel это должен быть URL вашего Railway сервиса
 BACKEND_URL = os.getenv("BACKEND_URL", "")
 
-# Секретный ключ для доступа (можно вынести в env)
-WEB_ACCESS_KEY = os.getenv("WEB_ACCESS_KEY", "change-me-in-production")
+# Секретный ключ для доступа (опционально, для защиты API)
+# Если не задан, защита отключена (подходит для личного использования)
+WEB_ACCESS_KEY = os.getenv("WEB_ACCESS_KEY", "")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -110,8 +111,8 @@ async def send_reply(
     access_key: Optional[str] = Form(None)
 ):
     """API для отправки ответа на письмо."""
-    # Простая проверка доступа (в production использовать нормальную аутентификацию)
-    if access_key and access_key != WEB_ACCESS_KEY:
+    # Простая проверка доступа (только если WEB_ACCESS_KEY задан)
+    if WEB_ACCESS_KEY and access_key and access_key != WEB_ACCESS_KEY:
         raise HTTPException(status_code=403, detail="Неверный ключ доступа")
     
     email_data = get_email_from_cache(local_id)

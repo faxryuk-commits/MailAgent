@@ -48,7 +48,7 @@ GOOGLE_REDIRECT_URI=http://localhost:8080/callback
 # Опционально: веб-интерфейс
 WEB_ENABLED=true
 WEB_PORT=8000
-WEB_ACCESS_KEY=your-secret-key-here
+WEB_ACCESS_KEY=your-secret-key-here  # Опционально: любая строка для защиты API (можно не задавать)
 ```
 
 4. Запустите приложение:
@@ -104,7 +104,7 @@ python -m app.main
 1. Включите веб-интерфейс в Railway:
    - Добавьте переменную `WEB_ENABLED=true`
    - Добавьте переменную `WEB_PORT=8000` (или другой порт)
-   - Добавьте переменную `WEB_ACCESS_KEY=ваш-секретный-ключ`
+   - Добавьте переменную `WEB_ACCESS_KEY=ваш-секретный-ключ` (опционально: любая строка, можно не задавать)
 
 2. Откройте веб-интерфейс:
    - На Railway: откройте ваш домен (например, `https://your-app.railway.app`)
