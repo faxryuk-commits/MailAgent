@@ -39,6 +39,11 @@ pip install -r requirements.txt
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 OWNER_TELEGRAM_ID=your_telegram_user_id
 OPENAI_API_KEY=your_openai_api_key
+
+# Опционально: для OAuth2 авторизации Gmail (рекомендуется)
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:8080/callback
 ```
 
 4. Запустите приложение:
@@ -59,7 +64,25 @@ python -m app.main
 2. Отправьте команду `/start`
 3. Скопируйте ваш User ID
 
-### Настройка Gmail App Password
+### Настройка Gmail (рекомендуется: OAuth2)
+
+**Вариант 1: OAuth2 авторизация (рекомендуется, более безопасно)**
+
+1. Создайте проект в [Google Cloud Console](https://console.cloud.google.com/)
+2. Включите Gmail API в разделе "APIs & Services"
+3. Создайте OAuth 2.0 Client ID:
+   - Перейдите в "APIs & Services" → "Credentials"
+   - Нажмите "Create Credentials" → "OAuth client ID"
+   - Выберите "Web application"
+   - Добавьте Redirect URI: `http://localhost:8080/callback` (для локальной разработки)
+   - Для Railway используйте ваш домен: `https://your-app.railway.app/callback`
+4. Скопируйте Client ID и Client Secret
+5. Добавьте их в переменные окружения:
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `GOOGLE_REDIRECT_URI`
+
+**Вариант 2: App Password (если OAuth2 не настроен)**
 
 Для Gmail необходимо использовать App Password вместо обычного пароля:
 

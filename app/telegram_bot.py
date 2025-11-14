@@ -15,6 +15,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.storage import save_account, get_account, load_accounts
 from app.email_client import send_email_smtp, get_email_from_cache, test_imap_connection
 from app.ai_client import polish_reply
+from app.oauth_client import get_authorization_url, exchange_code_for_tokens, refresh_access_token
 
 # Глобальные переменные для бота
 bot: Optional[Bot] = None
@@ -176,10 +177,76 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
     if current_state == SetupStates.gmail_user.state:
         email = message.text.strip()
         await state.update_data(imap_user=email)
-        await state.set_state(SetupStates.gmail_pass)
+        
+        # Проверяем, настроен ли OAuth2
+        from app.oauth_client import CLIENT_ID, CLIENT_SECRET, get_authorization_url
+        data = await state.get_data()
+        account_id = data["account_id"]
+        
+        if CLIENT_ID and CLIENT_SECRET:
+            # Используем OAuth2
+            try:
+                auth_url = get_authorization_url(account_id, email)
+                await state.set_state(SetupStates.gmail_oauth_code)
+                await message.answer(
+                    f"🔐 Авторизация через Google OAuth2\n\n"
+                    f"1. Откройте ссылку в браузере:\n{auth_url}\n\n"
+                    f"2. Авторизуйтесь в Google\n"
+                    f"3. Скопируйте код авторизации из адресной строки (параметр 'code')\n"
+                    f"4. Отправьте код боту\n\n"
+                    f"💡 Код будет выглядеть примерно так: 4/0AeanS..."
+                )
+            except Exception as e:
+                await message.answer(
+                    f"❌ Ошибка при создании OAuth2 ссылки: {e}\n\n"
+                    "Попробуем использовать пароль вместо этого."
+                )
+                await state.set_state(SetupStates.gmail_pass)
+                await message.answer(
+                    "Введите пароль для Gmail:\n\n"
+                    "💡 Сначала попробуем обычный пароль. Если не подойдет, попросим App Password."
+                )
+        else:
+            # Fallback на пароль
+            await state.set_state(SetupStates.gmail_pass)
+            await message.answer(
+                "Введите пароль для Gmail:\n\n"
+                "💡 Сначала попробуем обычный пароль. Если не подойдет, попросим App Password."
+            )
+    
+    elif current_state == SetupStates.gmail_oauth_code.state:
+        # Обработка OAuth2 кода
+        code = message.text.strip()
+        data = await state.get_data()
+        account_id = data["account_id"]
+        email = data["imap_user"]
+        
+        await message.answer("🔄 Обрабатываю код авторизации...")
+        
+        tokens = exchange_code_for_tokens(account_id, email, code)
+        
+        if not tokens:
+            await message.answer(
+                "❌ Не удалось получить токены. Проверьте код и попробуйте еще раз.\n\n"
+                "Или отправьте 'skip' для использования пароля."
+            )
+            return
+        
+        # Сохраняем аккаунт с OAuth2 токенами
+        account_data = {
+            "imap_host": "imap.gmail.com",
+            "imap_user": email,
+            "smtp_host": "smtp.gmail.com",
+            "smtp_port": 587,
+            "auth_type": "oauth2",
+            "oauth_tokens": tokens
+        }
+        
+        save_account(account_id, account_data)
+        await state.clear()
         await message.answer(
-            "Введите пароль для Gmail:\n\n"
-            "💡 Сначала попробуем обычный пароль. Если не подойдет, попросим App Password."
+            f"✅ Аккаунт {account_id} (Gmail) успешно настроен через OAuth2!\n\n"
+            "Бот будет проверять почту каждую минуту."
         )
     
     elif current_state == SetupStates.gmail_pass.state:
