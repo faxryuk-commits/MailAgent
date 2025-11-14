@@ -60,11 +60,15 @@ def get_authorization_url(account_id: int, email: str) -> str:
     Returns:
         URL для авторизации
     """
+    if not CLIENT_ID or not CLIENT_SECRET:
+        raise ValueError("GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET должны быть установлены")
+    
     flow = get_oauth_flow(account_id, email)
     authorization_url, _ = flow.authorization_url(
         access_type='offline',
         include_granted_scopes='true',
-        prompt='consent'  # Всегда запрашиваем согласие для получения refresh_token
+        prompt='consent',  # Всегда запрашиваем согласие для получения refresh_token
+        login_hint=email  # Подсказка для авторизации нужного аккаунта
     )
     return authorization_url
 
