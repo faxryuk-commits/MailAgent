@@ -28,7 +28,23 @@ app = FastAPI(title="Mail Agent AI")
 # Для Vercel используем абсолютный путь
 import pathlib
 template_dir = pathlib.Path(__file__).parent / "templates"
-templates = Jinja2Templates(directory=str(template_dir))
+template_dir_str = str(template_dir.absolute())
+
+# Проверяем существование директории шаблонов
+if not template_dir.exists():
+    print(f"⚠️  Директория шаблонов не найдена: {template_dir_str}")
+    print(f"   Текущая директория: {os.getcwd()}")
+    print(f"   __file__: {__file__}")
+    # Пробуем альтернативный путь
+    alt_template_dir = pathlib.Path("app/templates")
+    if alt_template_dir.exists():
+        template_dir_str = str(alt_template_dir.absolute())
+        print(f"   Используем альтернативный путь: {template_dir_str}")
+    else:
+        print(f"   ⚠️  Альтернативный путь тоже не найден: {alt_template_dir.absolute()}")
+
+templates = Jinja2Templates(directory=template_dir_str)
+print(f"✅ Шаблоны загружены из: {template_dir_str}")
 
 # URL бэкенда (Railway или другой сервер)
 # На Vercel это должен быть URL вашего Railway сервиса
