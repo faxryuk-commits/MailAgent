@@ -309,6 +309,56 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
     if message.text and message.text.startswith('/'):
         return
     
+    # Проверяем, не пишет ли пользователь свой ответ на письмо
+    data_state = await state.get_data()
+    custom_reply_id = data_state.get("custom_reply_id")
+    
+    if custom_reply_id:
+        # Пользователь пишет свой ответ на письмо
+        email_data = get_email_from_cache(custom_reply_id)
+        if not email_data:
+            await message.answer("❌ Письмо не найдено в кэше.")
+            await state.update_data(custom_reply_id=None)
+            return
+        
+        # Обрабатываем ответ как команду /reply
+        draft_text = message.text.strip()
+        account_id = email_data["account_id"]
+        from_field = email_data["from"]
+        if "<" in from_field and ">" in from_field:
+            to_email = from_field.split("<")[-1].split(">")[0].strip()
+        else:
+            to_email = from_field.strip()
+        
+        subject = f"Re: {email_data['subject']}"
+        context = f"От: {email_data['from']}\nТема: {email_data['subject']}\n\n{email_data['body'][:500]}"
+        
+        await message.answer("🔄 Обрабатываю ваш ответ...")
+        polished_reply = polish_reply(draft_text, context)
+        
+        success, msg = await send_email_smtp(
+            account_id,
+            to_email,
+            subject,
+            polished_reply,
+            telegram_notify_func=send_notification
+        )
+        
+        await state.update_data(custom_reply_id=None)
+        
+        if success:
+            success_msg = generate_friendly_response(
+                f"Ответ успешно отправлен получателю {to_email}."
+            )
+            await message.answer(
+                f"✅ {success_msg}\n\n"
+                f"📧 Получатель: {to_email}\n"
+                f"📝 Отправленный текст:\n{polished_reply}"
+            )
+        else:
+            await message.answer(f"❌ Ошибка при отправке: {msg}")
+        return
+    
     current_state = await state.get_state()
     
     if current_state == SetupStates.gmail_user.state:
