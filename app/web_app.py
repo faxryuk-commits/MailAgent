@@ -128,5 +128,6 @@ async def view_email(request: Request, local_id: str):
 
 def run_web_app(host: str = "0.0.0.0", port: int = 8000):
     """Запускает веб-приложение."""
+    import uvicorn
     uvicorn.run(app, host=host, port=port)
 
