@@ -37,7 +37,8 @@ OWNER_TELEGRAM_ID = get_owner_id()
 # FSM состояния для настройки аккаунтов
 class SetupStates(StatesGroup):
     gmail_user = State()
-    gmail_pass = State()
+    gmail_oauth_code = State()  # Для OAuth2 кода
+    gmail_pass = State()  # Fallback для пароля
     custom_imap_host = State()
     custom_imap_user = State()
     custom_imap_pass = State()
@@ -140,10 +141,20 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         if provider == "gmail":
             await state.update_data(account_id=account_id, provider="gmail")
             await state.set_state(SetupStates.gmail_user)
-            await callback.message.answer(
-                f"📧 Настройка аккаунта {account_id} (Gmail)\n\n"
-                "Введите ваш email адрес:"
-            )
+            
+            # Проверяем, настроен ли OAuth2
+            from app.oauth_client import CLIENT_ID, CLIENT_SECRET
+            if CLIENT_ID and CLIENT_SECRET:
+                await callback.message.answer(
+                    f"📧 Настройка аккаунта {account_id} (Gmail)\n\n"
+                    "Введите ваш email адрес для OAuth2 авторизации:"
+                )
+            else:
+                await callback.message.answer(
+                    f"📧 Настройка аккаунта {account_id} (Gmail)\n\n"
+                    "⚠️ OAuth2 не настроен. Используется авторизация по паролю.\n"
+                    "Введите ваш email адрес:"
+                )
         elif provider == "custom":
             await state.update_data(account_id=account_id, provider="custom")
             await state.set_state(SetupStates.custom_imap_host)
