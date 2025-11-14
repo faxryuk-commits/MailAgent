@@ -275,6 +275,7 @@ async def test_imap_connection(imap_host: str, imap_user: str, imap_pass: str) -
     
     Returns:
         (успех, сообщение_об_ошибке)
+        Сообщение может быть: "authentication_error", "app_password_required", или текст ошибки
     """
     try:
         loop = asyncio.get_event_loop()
@@ -292,8 +293,19 @@ async def test_imap_connection(imap_host: str, imap_user: str, imap_pass: str) -
         
     except imaplib.IMAP4.error as e:
         error_msg = str(e).lower()
-        if "authentication" in error_msg or "login" in error_msg:
+        error_bytes = str(e)
+        
+        # Проверяем на требование App Password
+        if "application-specific password" in error_msg or "app password" in error_msg:
+            return False, "app_password_required"
+        
+        # Проверяем на общую ошибку авторизации
+        if "authentication" in error_msg or "login" in error_msg or "failure" in error_msg:
+            # Для Gmail, если это не App Password, то скорее всего нужен App Password
+            if "gmail.com" in imap_host.lower():
+                return False, "app_password_required"
             return False, "authentication_error"
+        
         return False, str(e)
     except Exception as e:
         return False, str(e)

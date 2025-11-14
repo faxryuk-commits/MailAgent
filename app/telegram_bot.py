@@ -309,7 +309,24 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
                 password
             )
             
-            if not success and error == "authentication_error":
+            if not success and error == "app_password_required":
+                # Gmail требует App Password
+                await state.update_data(needs_app_password=True)
+                await message.answer(
+                    "⚠️ Gmail требует App Password!\n\n"
+                    "Обычный пароль не подходит, потому что:\n"
+                    "• Включена двухфакторная аутентификация, или\n"
+                    "• Google требует использовать App Password для безопасности\n\n"
+                    "📋 Как получить App Password:\n"
+                    "1. Перейдите: https://myaccount.google.com/apppasswords\n"
+                    "2. Выберите приложение: 'Почта'\n"
+                    "3. Выберите устройство: 'Другое' → введите 'Mail Agent'\n"
+                    "4. Нажмите 'Создать'\n"
+                    "5. Скопируйте 16-символьный пароль (без пробелов)\n\n"
+                    "Введите App Password:"
+                )
+                return
+            elif not success and error == "authentication_error":
                 # Не получилось с обычным паролем - просим App Password
                 await state.update_data(needs_app_password=True)
                 await message.answer(
@@ -345,7 +362,19 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
         )
         
         if not success:
-            if error == "authentication_error":
+            if error == "app_password_required":
+                await state.update_data(needs_app_password=True)
+                await message.answer(
+                    "⚠️ Требуется App Password!\n\n"
+                    "Gmail не принимает обычный пароль.\n\n"
+                    "📋 Как получить App Password:\n"
+                    "1. https://myaccount.google.com/apppasswords\n"
+                    "2. Выберите 'Почта' → 'Другое' → 'Mail Agent'\n"
+                    "3. Скопируйте 16-символьный пароль\n\n"
+                    "Введите App Password:"
+                )
+                return
+            elif error == "authentication_error":
                 await message.answer(
                     "❌ Пароль не подошел.\n\n"
                     "Попробуйте еще раз или используйте App Password:\n"
