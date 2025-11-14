@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+email_accounts.json
+.env
+.venv
+venv/
+env/
+*.log
+.DS_Store
+.idea/
+.vscode/
+
