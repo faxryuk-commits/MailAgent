@@ -268,3 +268,33 @@ def get_email_from_cache(local_id: str) -> Optional[dict]:
     """Получает письмо из кэша по local_id."""
     return EMAIL_CACHE.get(local_id)
 
+
+async def test_imap_connection(imap_host: str, imap_user: str, imap_pass: str) -> tuple[bool, str]:
+    """
+    Тестирует подключение к IMAP серверу.
+    
+    Returns:
+        (успех, сообщение_об_ошибке)
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        
+        def imap_test():
+            mail = imaplib.IMAP4_SSL(imap_host)
+            mail.login(imap_user, imap_pass)
+            mail.select("INBOX")
+            mail.close()
+            mail.logout()
+            return True, ""
+        
+        await loop.run_in_executor(None, imap_test)
+        return True, ""
+        
+    except imaplib.IMAP4.error as e:
+        error_msg = str(e).lower()
+        if "authentication" in error_msg or "login" in error_msg:
+            return False, "authentication_error"
+        return False, str(e)
+    except Exception as e:
+        return False, str(e)
+

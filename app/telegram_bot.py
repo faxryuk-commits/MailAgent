@@ -13,7 +13,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQu
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.storage import save_account, get_account, load_accounts
-from app.email_client import send_email_smtp, get_email_from_cache
+from app.email_client import send_email_smtp, get_email_from_cache, test_imap_connection
 from app.ai_client import polish_reply
 
 # Глобальные переменные для бота
@@ -178,28 +178,84 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
         await state.update_data(imap_user=email)
         await state.set_state(SetupStates.gmail_pass)
         await message.answer(
-            "Введите App Password для Gmail:\n\n"
-            "⚠️ Необходимо использовать App Password, а не обычный пароль.\n"
-            "Инструкция: https://support.google.com/accounts/answer/185833"
+            "Введите пароль для Gmail:\n\n"
+            "💡 Сначала попробуем обычный пароль. Если не подойдет, попросим App Password."
         )
     
     elif current_state == SetupStates.gmail_pass.state:
         password = message.text.strip()
         data = await state.get_data()
         account_id = data["account_id"]
+        email = data["imap_user"]
         
+        # Проверяем, не просили ли уже App Password
+        needs_app_password = data.get("needs_app_password", False)
+        
+        if not needs_app_password:
+            # Пробуем подключиться с обычным паролем
+            await message.answer("🔄 Проверяю подключение...")
+            
+            success, error = await test_imap_connection(
+                "imap.gmail.com",
+                email,
+                password
+            )
+            
+            if not success and error == "authentication_error":
+                # Не получилось с обычным паролем - просим App Password
+                await state.update_data(needs_app_password=True)
+                await message.answer(
+                    "⚠️ Обычный пароль не подошел.\n\n"
+                    "Похоже, у вас включена двухфакторная аутентификация.\n"
+                    "Введите App Password для Gmail:\n\n"
+                    "📖 Инструкция: https://support.google.com/accounts/answer/185833"
+                )
+                return
+            elif not success:
+                # Другая ошибка
+                await message.answer(
+                    f"❌ Ошибка подключения: {error}\n\n"
+                    "Попробуйте еще раз или введите другой пароль:"
+                )
+                return
+        
+        # Пароль подошел или это уже App Password - сохраняем
         account_data = {
             "imap_host": "imap.gmail.com",
-            "imap_user": data["imap_user"],
+            "imap_user": email,
             "imap_pass": password,
             "smtp_host": "smtp.gmail.com",
             "smtp_port": 587
         }
         
+        # Финальная проверка перед сохранением
+        await message.answer("🔄 Финальная проверка подключения...")
+        success, error = await test_imap_connection(
+            "imap.gmail.com",
+            email,
+            password
+        )
+        
+        if not success:
+            if error == "authentication_error":
+                await message.answer(
+                    "❌ Пароль не подошел.\n\n"
+                    "Попробуйте еще раз или используйте App Password:\n"
+                    "https://support.google.com/accounts/answer/185833"
+                )
+                return
+            else:
+                await message.answer(
+                    f"❌ Ошибка подключения: {error}\n\n"
+                    "Попробуйте еще раз:"
+                )
+                return
+        
         save_account(account_id, account_data)
         await state.clear()
         await message.answer(
-            f"✅ Аккаунт {account_id} (Gmail) успешно настроен!"
+            f"✅ Аккаунт {account_id} (Gmail) успешно настроен!\n\n"
+            "Бот будет проверять почту каждую минуту."
         )
     
     elif current_state == SetupStates.custom_imap_host.state:
@@ -216,9 +272,26 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
     
     elif current_state == SetupStates.custom_imap_pass.state:
         imap_pass = message.text.strip()
+        data = await state.get_data()
+        imap_host = data["imap_host"]
+        imap_user = data["imap_user"]
+        
         await state.update_data(imap_pass=imap_pass)
+        
+        # Проверяем подключение
+        await message.answer("🔄 Проверяю подключение к IMAP...")
+        success, error = await test_imap_connection(imap_host, imap_user, imap_pass)
+        
+        if not success:
+            await message.answer(
+                f"❌ Ошибка подключения к IMAP: {error}\n\n"
+                "Проверьте правильность данных и попробуйте еще раз.\n"
+                "Введите IMAP пароль:"
+            )
+            return
+        
         await state.set_state(SetupStates.custom_smtp_host)
-        await message.answer("Введите SMTP хост (например, smtp.example.com):")
+        await message.answer("✅ IMAP подключение успешно!\n\nВведите SMTP хост (например, smtp.example.com):")
     
     elif current_state == SetupStates.custom_smtp_host.state:
         smtp_host = message.text.strip()
