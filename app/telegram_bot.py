@@ -72,16 +72,30 @@ def init_bot():
 
 def check_owner(func):
     """Декоратор для проверки, что пользователь - владелец."""
-    async def wrapper(message: types.Message, *args, **kwargs):
-        if message.from_user.id != OWNER_TELEGRAM_ID:
-            await message.answer("❌ У вас нет доступа к этому боту.")
+    async def wrapper(event, *args, **kwargs):
+        # Поддерживаем как Message, так и CallbackQuery
+        if isinstance(event, types.Message):
+            user_id = event.from_user.id
+            answer_func = event.answer
+        elif isinstance(event, types.CallbackQuery):
+            user_id = event.from_user.id
+            answer_func = event.message.answer if event.message else None
+        else:
+            user_id = getattr(event, 'from_user', None)
+            if user_id:
+                user_id = user_id.id
+            answer_func = None
+        
+        if user_id != OWNER_TELEGRAM_ID:
+            if answer_func:
+                await answer_func("❌ У вас нет доступа к этому боту.")
             return
-        return await func(message, *args, **kwargs)
+        return await func(event, *args, **kwargs)
     return wrapper
 
 
 @check_owner
-async def handle_start(message: types.Message):
+async def handle_start(message: types.Message, **kwargs):
     """Обработчик команды /start."""
     keyboard = InlineKeyboardBuilder()
     
@@ -109,11 +123,9 @@ async def handle_start(message: types.Message):
     )
 
 
-async def handle_callback(callback: CallbackQuery, state: FSMContext):
+@check_owner
+async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
     """Обработчик callback-кнопок."""
-    if callback.from_user.id != OWNER_TELEGRAM_ID:
-        await callback.answer("❌ У вас нет доступа.", show_alert=True)
-        return
     
     data = callback.data
     
@@ -150,7 +162,7 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext):
         )
 
 
-async def handle_text_message(message: types.Message, state: FSMContext):
+async def handle_text_message(message: types.Message, state: FSMContext, **kwargs):
     """Обработчик текстовых сообщений (для FSM)."""
     if message.from_user.id != OWNER_TELEGRAM_ID:
         return
@@ -244,7 +256,7 @@ async def handle_text_message(message: types.Message, state: FSMContext):
 
 
 @check_owner
-async def handle_reply(message: types.Message):
+async def handle_reply(message: types.Message, **kwargs):
     """Обработчик команды /reply <ID> <текст>."""
     text = message.text.strip()
     parts = text.split(None, 2)  # /reply ID текст
