@@ -20,7 +20,17 @@ from app.ai_client import polish_reply
 bot: Optional[Bot] = None
 dp: Optional[Dispatcher] = None
 
-OWNER_TELEGRAM_ID = int(os.getenv("OWNER_TELEGRAM_ID", "0"))
+def get_owner_id():
+    """Получает ID владельца из переменных окружения."""
+    owner_id = os.getenv("OWNER_TELEGRAM_ID")
+    if not owner_id:
+        return 0
+    try:
+        return int(owner_id)
+    except ValueError:
+        return 0
+
+OWNER_TELEGRAM_ID = get_owner_id()
 
 
 # FSM состояния для настройки аккаунтов
