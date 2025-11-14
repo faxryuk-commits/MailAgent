@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from typing import Optional
 import uvicorn
+import httpx
 
 from app.storage import load_accounts, get_account, save_account
 from app.email_client import get_email_from_cache, EMAIL_CACHE, send_email_smtp
@@ -17,7 +18,13 @@ from app.ai_client import summarize_email, polish_reply, suggest_reply_options
 app = FastAPI(title="Mail Agent AI")
 
 # Настройка шаблонов
-templates = Jinja2Templates(directory="app/templates")
+# Для Vercel используем абсолютный путь
+import pathlib
+template_dir = pathlib.Path(__file__).parent / "templates"
+templates = Jinja2Templates(directory=str(template_dir))
+
+# URL бэкенда (Railway или другой сервер)
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 # Секретный ключ для доступа (можно вынести в env)
 WEB_ACCESS_KEY = os.getenv("WEB_ACCESS_KEY", "change-me-in-production")
@@ -26,8 +33,22 @@ WEB_ACCESS_KEY = os.getenv("WEB_ACCESS_KEY", "change-me-in-production")
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Главная страница."""
-    accounts = load_accounts()
-    recent_emails = list(EMAIL_CACHE.values())[-20:]  # Последние 20 писем
+    # Пытаемся получить данные из локального кэша или бэкенда
+    try:
+        accounts = load_accounts()
+        recent_emails = list(EMAIL_CACHE.values())[-20:]  # Последние 20 писем
+    except:
+        # Если локально нет данных, пытаемся получить с бэкенда
+        accounts = {}
+        recent_emails = []
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{BACKEND_URL}/api/emails", timeout=5.0)
+                if response.status_code == 200:
+                    data = response.json()
+                    recent_emails = data.get("emails", [])[:20]
+        except:
+            pass
     
     return templates.TemplateResponse("index.html", {
         "request": request,
@@ -39,17 +60,37 @@ async def index(request: Request):
 @app.get("/api/emails", response_class=JSONResponse)
 async def get_emails():
     """API для получения списка писем."""
-    emails = list(EMAIL_CACHE.values())
-    # Сортируем по дате (новые первыми)
-    emails.sort(key=lambda x: x.get('date_raw', ''), reverse=True)
-    return {"emails": emails[:50]}  # Последние 50 писем
+    try:
+        emails = list(EMAIL_CACHE.values())
+        # Сортируем по дате (новые первыми)
+        emails.sort(key=lambda x: x.get('date_raw', ''), reverse=True)
+        return {"emails": emails[:50]}  # Последние 50 писем
+    except:
+        # Если локально нет данных, пробуем получить с бэкенда
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{BACKEND_URL}/api/emails", timeout=5.0)
+                if response.status_code == 200:
+                    return response.json()
+        except:
+            pass
+        return {"emails": []}
 
 
 @app.get("/api/email/{local_id}", response_class=JSONResponse)
 async def get_email(local_id: str):
     """API для получения конкретного письма."""
     email_data = get_email_from_cache(local_id)
+    
+    # Если локально нет, пробуем получить с бэкенда
     if not email_data:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{BACKEND_URL}/api/email/{local_id}", timeout=5.0)
+                if response.status_code == 200:
+                    return response.json()
+        except:
+            pass
         raise HTTPException(status_code=404, detail="Письмо не найдено")
     
     # Генерируем варианты ответов через AI
@@ -73,9 +114,40 @@ async def send_reply(
         raise HTTPException(status_code=403, detail="Неверный ключ доступа")
     
     email_data = get_email_from_cache(local_id)
+    
+    # Если локально нет, пробуем получить с бэкенда
+    if not email_data:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{BACKEND_URL}/api/email/{local_id}", timeout=5.0)
+                if response.status_code == 200:
+                    data = response.json()
+                    email_data = data.get("email")
+        except:
+            pass
+    
     if not email_data:
         raise HTTPException(status_code=404, detail="Письмо не найдено")
     
+    # Если есть бэкенд, отправляем через него
+    if BACKEND_URL and BACKEND_URL != "http://localhost:8000":
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{BACKEND_URL}/api/reply",
+                    data={
+                        "local_id": local_id,
+                        "reply_text": reply_text,
+                        "access_key": access_key or WEB_ACCESS_KEY
+                    },
+                    timeout=30.0
+                )
+                if response.status_code == 200:
+                    return response.json()
+        except Exception as e:
+            print(f"Ошибка при отправке через бэкенд: {e}")
+    
+    # Локальная отправка (если нет бэкенда)
     account_id = email_data["account_id"]
     from_field = email_data["from"]
     
