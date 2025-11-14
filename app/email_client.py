@@ -7,6 +7,7 @@ import email
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.header import decode_header
+from email.utils import parsedate_to_datetime
 from datetime import datetime
 from typing import Optional, List, Dict
 import asyncio
@@ -30,6 +31,58 @@ def decode_mime_words(s):
         else:
             decoded_str += part
     return decoded_str
+
+
+def parse_email_date(date_str: str) -> str:
+    """
+    Парсит дату из email заголовка и форматирует в читаемый вид.
+    
+    Args:
+        date_str: Строка с датой из заголовка email
+        
+    Returns:
+        Отформатированная дата и время
+    """
+    if not date_str:
+        return "Дата не указана"
+    
+    try:
+        # Парсим дату из email формата
+        email_date = parsedate_to_datetime(date_str)
+        
+        # Форматируем в читаемый вид (русская локаль)
+        now = datetime.now(email_date.tzinfo) if email_date.tzinfo else datetime.now()
+        diff = now - email_date.replace(tzinfo=None) if email_date.tzinfo else now - email_date
+        
+        # Если письмо сегодня
+        if diff.days == 0:
+            if diff.seconds < 3600:  # Меньше часа
+                minutes = diff.seconds // 60
+                if minutes == 0:
+                    return "только что"
+                return f"{minutes} мин. назад"
+            else:  # Больше часа, но сегодня
+                hours = diff.seconds // 3600
+                return f"{hours} ч. назад"
+        # Если письмо вчера
+        elif diff.days == 1:
+            return f"вчера в {email_date.strftime('%H:%M')}"
+        # Если письмо на этой неделе
+        elif diff.days < 7:
+            days_ru = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+            day_name = days_ru[email_date.weekday()]
+            return f"{day_name} в {email_date.strftime('%H:%M')}"
+        # Если письмо старше недели
+        else:
+            # Форматируем дату на русском
+            months_ru = ["", "января", "февраля", "марта", "апреля", "мая", "июня",
+                        "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+            return f"{email_date.day} {months_ru[email_date.month]} {email_date.year} в {email_date.strftime('%H:%M')}"
+    
+    except Exception as e:
+        # Если не удалось распарсить, возвращаем как есть
+        print(f"Ошибка при парсинге даты: {e}, исходная строка: {date_str}")
+        return date_str
 
 
 def parse_email_body(msg) -> str:
@@ -142,7 +195,8 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
                 # Извлечение данных
                 from_addr = decode_mime_words(msg.get("From", ""))
                 subject = decode_mime_words(msg.get("Subject", ""))
-                date_str = msg.get("Date", "")
+                date_raw = msg.get("Date", "")
+                date_formatted = parse_email_date(date_raw)
                 body = parse_email_body(msg)
                 
                 # Создание резюме через OpenAI (синхронная операция)
@@ -158,7 +212,8 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
                     "account_id": account_id,
                     "from": from_addr,
                     "subject": subject,
-                    "date": date_str,
+                    "date": date_formatted,
+                    "date_raw": date_raw,  # Сохраняем и исходную дату
                     "body": body,
                     "summary": summary,
                     "original_msg": msg
@@ -178,7 +233,8 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
                     message = (
                         f"📧 Новое письмо (Аккаунт {account_id})\n\n"
                         f"От: {from_addr}\n"
-                        f"Тема: {subject}\n\n"
+                        f"Тема: {subject}\n"
+                        f"📅 Дата: {date_formatted}\n\n"
                         f"📝 Резюме:\n{summary}\n\n"
                         f"ID для ответа: `{local_id}`"
                     )
