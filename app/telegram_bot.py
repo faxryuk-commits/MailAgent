@@ -1234,13 +1234,14 @@ async def handle_reply(message: types.Message, **kwargs):
         await message.answer(f"❌ Ошибка при отправке: {msg}")
 
 
-async def send_notification(text: str, local_id: str = None):
+async def send_notification(text: str, local_id: str = None, category: str = None):
     """Отправляет уведомление владельцу в Telegram."""
     if not bot:
         return
     
     try:
-        if local_id:
+        # Не показываем кнопку "Ответить" для спама и рассылок
+        if local_id and category not in ["spam", "newsletter"]:
             # Добавляем кнопку для быстрого ответа
             keyboard = InlineKeyboardBuilder()
             keyboard.add(InlineKeyboardButton(
@@ -1254,7 +1255,7 @@ async def send_notification(text: str, local_id: str = None):
                 parse_mode="Markdown"
             )
         else:
-            await bot.send_message(OWNER_TELEGRAM_ID, text)
+            await bot.send_message(OWNER_TELEGRAM_ID, text, parse_mode="Markdown")
     except Exception as e:
         print(f"Ошибка при отправке уведомления в Telegram: {e}")
 
