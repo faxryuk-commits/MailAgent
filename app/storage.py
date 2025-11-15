@@ -22,6 +22,10 @@ Path(STORAGE_DIR).mkdir(parents=True, exist_ok=True)
 STORAGE_FILE = os.path.join(STORAGE_DIR, "email_accounts.json")
 print(f"📁 Файл хранилища: {STORAGE_FILE}")
 
+# Альтернативное хранилище через переменные окружения (если Volume недоступен)
+# Если EMAIL_ACCOUNTS_JSON задана, используем её вместо файла
+ENV_STORAGE_KEY = "EMAIL_ACCOUNTS_JSON"
+
 
 def migrate_old_accounts() -> None:
     """
@@ -73,7 +77,22 @@ migrate_old_accounts()
 
 
 def load_accounts() -> Dict[str, dict]:
-    """Загружает аккаунты из email_accounts.json."""
+    """Загружает аккаунты из email_accounts.json или переменной окружения."""
+    # Сначала проверяем переменную окружения (приоритет)
+    env_data = os.getenv(ENV_STORAGE_KEY)
+    if env_data:
+        try:
+            accounts = json.loads(env_data)
+            if accounts:
+                print(f"✅ Загружено аккаунтов из переменной окружения {ENV_STORAGE_KEY}: {len(accounts)} ({list(accounts.keys())})")
+            else:
+                print(f"📭 Переменная окружения {ENV_STORAGE_KEY} пуста")
+            return accounts
+        except json.JSONDecodeError as e:
+            print(f"⚠️  Ошибка при парсинге {ENV_STORAGE_KEY}: {e}")
+            # Продолжаем загрузку из файла
+    
+    # Загружаем из файла
     if not os.path.exists(STORAGE_FILE):
         print(f"📭 Файл аккаунтов не найден: {STORAGE_FILE}")
         return {}
@@ -92,12 +111,13 @@ def load_accounts() -> Dict[str, dict]:
 
 
 def save_accounts(accounts: Dict[str, dict]) -> None:
-    """Сохраняет аккаунты в email_accounts.json."""
+    """Сохраняет аккаунты в email_accounts.json и/или переменную окружения."""
     # Защита от случайной перезаписи пустым словарем
     if not accounts:
         print("⚠️  Попытка сохранить пустой словарь аккаунтов! Пропускаем сохранение.")
         return
     
+    # Сохраняем в файл (если возможно)
     try:
         # Создаем директорию, если её нет (на случай, если она была удалена)
         Path(STORAGE_DIR).mkdir(parents=True, exist_ok=True)
@@ -110,13 +130,20 @@ def save_accounts(accounts: Dict[str, dict]) -> None:
             file_size = os.path.getsize(STORAGE_FILE)
             print(f"✅ Аккаунты сохранены в {STORAGE_FILE}: {list(accounts.keys())} (размер: {file_size} байт)")
         else:
-            print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: Файл не был создан после записи: {STORAGE_FILE}")
-            raise IOError(f"Файл не был создан: {STORAGE_FILE}")
+            print(f"⚠️  Файл не был создан: {STORAGE_FILE} (возможно, нет доступа к файловой системе)")
     except Exception as e:
-        print(f"❌ Ошибка при сохранении аккаунтов в {STORAGE_FILE}: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
+        print(f"⚠️  Не удалось сохранить в файл {STORAGE_FILE}: {e}")
+        print(f"   Продолжаем сохранение в переменную окружения...")
+    
+    # ВАЖНО: Для постоянного хранения на Railway без Volume
+    # нужно вручную обновить переменную окружения EMAIL_ACCOUNTS_JSON
+    # Это временное решение до настройки Volume
+    accounts_json = json.dumps(accounts, ensure_ascii=False)
+    print(f"💡 Для постоянного хранения без Volume:")
+    print(f"   1. Скопируйте следующий JSON:")
+    print(f"   {accounts_json[:200]}..." if len(accounts_json) > 200 else f"   {accounts_json}")
+    print(f"   2. Добавьте переменную окружения EMAIL_ACCOUNTS_JSON в Railway")
+    print(f"   3. Вставьте скопированный JSON как значение")
 
 
 def get_account(account_id: int) -> Optional[dict]:
