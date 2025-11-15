@@ -131,7 +131,18 @@ async def main():
     
     # Проверяем, нужно ли запускать веб-приложение
     web_enabled = os.getenv("WEB_ENABLED", "false").lower() == "true"
-    web_port = int(os.getenv("WEB_PORT", "8000"))
+    
+    # Обработка порта: если WEB_PORT=$PORT, используем переменную PORT от Railway
+    web_port_str = os.getenv("WEB_PORT", "8000")
+    if web_port_str == "$PORT":
+        # Railway автоматически устанавливает переменную PORT
+        web_port_str = os.getenv("PORT", "8000")
+    
+    try:
+        web_port = int(web_port_str)
+    except ValueError:
+        print(f"⚠️  Неверное значение WEB_PORT: '{web_port_str}', используем 8000")
+        web_port = 8000
     
     if web_enabled and web_app is not None:
         print(f"🌐 Веб-интерфейс доступен на http://0.0.0.0:{web_port}")
