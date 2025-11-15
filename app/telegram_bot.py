@@ -354,6 +354,252 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
     
     data = callback.data
     
+    # Обработка меню
+    if data == "menu:main":
+        try:
+            await callback.answer()
+        except:
+            pass
+        
+        from app.email_client import check_account_status
+        
+        # Проверяем статус аккаунтов
+        status1 = await check_account_status(1)
+        status2 = await check_account_status(2)
+        
+        status_info = "📊 **Статус аккаунтов:**\n"
+        if status1["configured"]:
+            status_emoji = "✅" if status1["connected"] else "❌"
+            status_info += f"{status_emoji} Аккаунт 1: {status1['email'] or 'Не настроен'}\n"
+        else:
+            status_info += "⚪ Аккаунт 1: Не настроен\n"
+        
+        if status2["configured"]:
+            status_emoji = "✅" if status2["connected"] else "❌"
+            status_info += f"{status_emoji} Аккаунт 2: {status2['email'] or 'Не настроен'}\n"
+        else:
+            status_info += "⚪ Аккаунт 2: Не настроен\n"
+        
+        await callback.message.edit_text(
+            f"📱 **Mail Agent AI**\n\n{status_info}\n\nВыберите раздел:",
+            reply_markup=get_main_menu_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "menu:emails":
+        try:
+            await callback.answer()
+        except:
+            pass
+        
+        await callback.message.edit_text(
+            "📧 **Письма**\n\nВыберите фильтр:",
+            reply_markup=get_emails_menu_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "menu:search":
+        try:
+            await callback.answer()
+        except:
+            pass
+        
+        await callback.message.edit_text(
+            "🔍 **Поиск по письмам**\n\n"
+            "Введите поисковый запрос:\n\n"
+            "Примеры:\n"
+            "• `проект` - найти все письма со словом 'проект'\n"
+            "• `client@company.com` - найти письма от этого отправителя\n"
+            "• `встреча` - найти письма с упоминанием 'встреча'\n\n"
+            "Или используйте команду: `/search <запрос>`",
+            reply_markup=InlineKeyboardBuilder().add(
+                InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main")
+            ).as_markup(),
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "menu:stats":
+        try:
+            await callback.answer("🔄 Загружаю статистику...")
+        except:
+            pass
+        
+        # Вызываем handle_stats логику
+        from app.email_client import get_email_statistics
+        
+        stats = get_email_statistics()
+        
+        if stats["total"] == 0:
+            await callback.message.edit_text(
+                "📊 **Статистика**\n\n❌ Писем в кэше нет.\n\n"
+                "💡 Дождитесь получения новых писем.",
+                reply_markup=InlineKeyboardBuilder().add(
+                    InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main")
+                ).as_markup(),
+                parse_mode="Markdown"
+            )
+            return
+        
+        result_text = "📊 **Статистика по письмам**\n\n"
+        result_text += f"📧 **Всего писем:** {stats['total']}\n"
+        result_text += f"📬 **Цепочек переписки:** {stats['threads_count']}\n\n"
+        
+        # По категориям
+        category_emoji = {
+            "work": "💼", "personal": "👤", "newsletter": "📰", 
+            "spam": "🗑️", "important": "⭐"
+        }
+        category_name = {
+            "work": "Работа", "personal": "Личное", "newsletter": "Рассылка",
+            "spam": "Спам", "important": "Важное"
+        }
+        
+        result_text += "**По категориям:**\n"
+        for category, count in sorted(stats["by_category"].items(), key=lambda x: x[1], reverse=True):
+            emoji = category_emoji.get(category, "📧")
+            name = category_name.get(category, category)
+            percentage = (count / stats["total"]) * 100
+            result_text += f"{emoji} {name}: {count} ({percentage:.1f}%)\n"
+        
+        result_text += "\n"
+        
+        # По приоритетам
+        priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+        priority_name = {
+            "high": "Высокий", "medium": "Средний", "low": "Низкий"
+        }
+        
+        result_text += "**По приоритетам:**\n"
+        for priority, count in sorted(stats["by_priority"].items(), key=lambda x: x[1], reverse=True):
+            emoji = priority_emoji.get(priority, "🟡")
+            name = priority_name.get(priority, priority)
+            percentage = (count / stats["total"]) * 100
+            result_text += f"{emoji} {name}: {count} ({percentage:.1f}%)\n"
+        
+        result_text += "\n"
+        
+        # По времени
+        result_text += "**По времени:**\n"
+        result_text += f"📅 Сегодня: {stats['by_time']['today']}\n"
+        result_text += f"📅 Вчера: {stats['by_time']['yesterday']}\n"
+        result_text += f"📅 За неделю: {stats['by_time']['week']}\n"
+        
+        keyboard = InlineKeyboardBuilder()
+        keyboard.add(InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main"))
+        
+        await callback.message.edit_text(
+            result_text,
+            reply_markup=keyboard.as_markup(),
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "menu:threads":
+        try:
+            await callback.answer()
+        except:
+            pass
+        
+        await callback.message.edit_text(
+            "📬 **Цепочки переписки**\n\n"
+            "Для просмотра цепочки писем используйте команду:\n"
+            "`/thread <ID>`\n\n"
+            "Пример: `/thread 1-1234567890`\n\n"
+            "ID письма можно найти в списке писем.",
+            reply_markup=InlineKeyboardBuilder().add(
+                InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main")
+            ).as_markup(),
+            parse_mode="Markdown"
+        )
+        return
+    
+    elif data == "menu:settings":
+        try:
+            await callback.answer()
+        except:
+            pass
+        
+        await callback.message.edit_text(
+            "⚙️ **Настройки**\n\nВыберите действие:",
+            reply_markup=get_settings_menu_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Обработка фильтров писем
+    elif data.startswith("emails:"):
+        filter_type = data.split(":")[1]
+        try:
+            await callback.answer("🔄 Загружаю письма...")
+        except:
+            pass
+        
+        # Вызываем handle_emails логику
+        from app.email_client import EMAIL_CACHE
+        
+        all_emails = list(EMAIL_CACHE.values())
+        all_emails.sort(key=lambda x: x.get('date_raw', ''), reverse=True)
+        
+        if filter_type != "all":
+            if filter_type in ["work", "personal", "newsletter", "spam", "important"]:
+                all_emails = [e for e in all_emails if e.get('category') == filter_type]
+            elif filter_type in ["high", "medium", "low"]:
+                all_emails = [e for e in all_emails if e.get('priority') == filter_type]
+            elif filter_type == "today":
+                filtered_emails = []
+                for e in all_emails:
+                    date_str = e.get('date', '')
+                    if any(word in date_str.lower() for word in ['сегодня', 'только что', 'мин', 'час', 'сек']):
+                        filtered_emails.append(e)
+                all_emails = filtered_emails
+        
+        if not all_emails:
+            await callback.message.edit_text(
+                f"📭 Писем не найдено" + 
+                (f" (фильтр: {filter_type})" if filter_type != "all" else ""),
+                reply_markup=get_emails_menu_keyboard(),
+                parse_mode="Markdown"
+            )
+            return
+        
+        emails_to_show = all_emails[:20]
+        
+        priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+        category_emoji = {
+            "work": "💼", "personal": "👤", "newsletter": "📰", 
+            "spam": "🗑️", "important": "⭐"
+        }
+        
+        result_text = f"📧 Найдено писем: {len(all_emails)}\n"
+        if filter_type != "all":
+            result_text += f"🔍 Фильтр: {filter_type}\n"
+        result_text += f"\n"
+        
+        for i, email_data in enumerate(emails_to_show, 1):
+            priority = email_data.get('priority', 'medium')
+            category = email_data.get('category', 'work')
+            
+            result_text += (
+                f"{i}. {priority_emoji.get(priority, '🟡')} {category_emoji.get(category, '💼')} "
+                f"{email_data.get('from', 'Неизвестно')[:30]}\n"
+                f"   📝 {email_data.get('subject', 'Без темы')[:40]}\n"
+                f"   📅 {email_data.get('date', '')}\n"
+                f"   ID: `{email_data.get('local_id', '')}`\n\n"
+            )
+        
+        if len(all_emails) > 20:
+            result_text += f"\n... и еще {len(all_emails) - 20} писем"
+        
+        await callback.message.edit_text(
+            result_text,
+            reply_markup=get_emails_menu_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+    
     if data == "show_status":
         # Показываем статус через callback
         try:
