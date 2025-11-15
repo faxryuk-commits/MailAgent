@@ -1071,6 +1071,85 @@ async def handle_search(message: types.Message, **kwargs):
 
 
 @check_owner
+async def handle_stats(message: types.Message, **kwargs):
+    """Обработчик команды /stats - показывает статистику по письмам."""
+    from app.email_client import get_email_statistics
+    
+    stats = get_email_statistics()
+    
+    if stats["total"] == 0:
+        await message.answer(
+            "📊 **Статистика**\n\n"
+            "❌ Писем в кэше нет.\n\n"
+            "💡 Дождитесь получения новых писем или проверьте настройки аккаунтов.",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Формируем сообщение со статистикой
+    result_text = "📊 **Статистика по письмам**\n\n"
+    
+    # Общая информация
+    result_text += f"📧 **Всего писем:** {stats['total']}\n"
+    result_text += f"📬 **Цепочек переписки:** {stats['threads_count']}\n\n"
+    
+    # По категориям
+    category_emoji = {
+        "work": "💼", "personal": "👤", "newsletter": "📰", 
+        "spam": "🗑️", "important": "⭐"
+    }
+    category_name = {
+        "work": "Работа", "personal": "Личное", "newsletter": "Рассылка",
+        "spam": "Спам", "important": "Важное"
+    }
+    
+    result_text += "**По категориям:**\n"
+    for category, count in sorted(stats["by_category"].items(), key=lambda x: x[1], reverse=True):
+        emoji = category_emoji.get(category, "📧")
+        name = category_name.get(category, category)
+        percentage = (count / stats["total"]) * 100
+        result_text += f"{emoji} {name}: {count} ({percentage:.1f}%)\n"
+    
+    result_text += "\n"
+    
+    # По приоритетам
+    priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+    priority_name = {
+        "high": "Высокий", "medium": "Средний", "low": "Низкий"
+    }
+    
+    result_text += "**По приоритетам:**\n"
+    for priority, count in sorted(stats["by_priority"].items(), key=lambda x: x[1], reverse=True):
+        emoji = priority_emoji.get(priority, "🟡")
+        name = priority_name.get(priority, priority)
+        percentage = (count / stats["total"]) * 100
+        result_text += f"{emoji} {name}: {count} ({percentage:.1f}%)\n"
+    
+    result_text += "\n"
+    
+    # По времени
+    result_text += "**По времени:**\n"
+    result_text += f"📅 Сегодня: {stats['by_time']['today']}\n"
+    result_text += f"📅 Вчера: {stats['by_time']['yesterday']}\n"
+    result_text += f"📅 За неделю: {stats['by_time']['week']}\n\n"
+    
+    # Топ отправителей
+    if stats["top_senders"]:
+        result_text += "**Топ отправителей:**\n"
+        for i, sender_info in enumerate(stats["top_senders"][:5], 1):  # Топ-5
+            from_addr = sender_info["from"]
+            count = sender_info["count"]
+            # Обрезаем длинные email адреса
+            if len(from_addr) > 35:
+                from_addr = from_addr[:32] + "..."
+            result_text += f"{i}. {from_addr}: {count} писем\n"
+    
+    result_text += "\n💡 Используйте `/emails`, `/search` или `/thread` для работы с письмами."
+    
+    await message.answer(result_text, parse_mode="Markdown")
+
+
+@check_owner
 async def handle_reply(message: types.Message, **kwargs):
     """Обработчик команды /reply <ID> <текст>."""
     text = message.text.strip()
