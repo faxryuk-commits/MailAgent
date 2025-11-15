@@ -114,6 +114,15 @@ async def main():
     
     print("Инициализация сервисов...")
     
+    # Проверка хранилища (импорт storage.py уже вывел путь к файлу)
+    from app.storage import STORAGE_FILE, STORAGE_DIR
+    print(f"💾 Хранилище: {STORAGE_DIR}")
+    if STORAGE_DIR == "/data":
+        print("✅ Используется Railway Volume (данные сохраняются между деплоями)")
+    else:
+        print(f"⚠️  Используется локальное хранилище: {STORAGE_DIR}")
+        print("   Для постоянного хранения на Railway настройте Volume (см. RAILWAY_VOLUME_SETUP.md)")
+    
     # Инициализация OpenAI
     try:
         init_openai()
@@ -136,6 +145,8 @@ async def main():
     # Загрузка аккаунтов
     accounts = load_accounts()
     print(f"✅ Загружено аккаунтов: {len(accounts)}")
+    if accounts:
+        print(f"   Аккаунты: {list(accounts.keys())}")
     
     # Регистрация обработчиков сигналов
     signal.signal(signal.SIGINT, signal_handler)
