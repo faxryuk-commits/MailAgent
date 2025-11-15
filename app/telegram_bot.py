@@ -1014,17 +1014,11 @@ async def handle_voice_message(message: types.Message, state: FSMContext, **kwar
         init_openai()
         from app.ai_client import client
         
-        # Открываем файл для чтения в бинарном режиме
+        # Whisper API требует файл, открываем его напрямую
         with open(tmp_path, 'rb') as audio_file:
-            # Whisper API требует файл с именем, поэтому используем NamedTemporaryFile
-            import io
-            audio_bytes = audio_file.read()
-            audio_io = io.BytesIO(audio_bytes)
-            audio_io.name = "voice.ogg"  # Указываем имя файла
-            
             transcript = client.audio.transcriptions.create(
                 model="whisper-1",
-                file=audio_io,
+                file=audio_file,
                 language="ru"
             )
         
