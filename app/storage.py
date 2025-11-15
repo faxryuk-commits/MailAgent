@@ -4,8 +4,23 @@
 import json
 import os
 from typing import Dict, Optional
+from pathlib import Path
 
-STORAGE_FILE = "email_accounts.json"
+# Определяем путь к файлу хранилища
+# На Railway используем Volume для постоянного хранения
+# Если переменная STORAGE_PATH не задана, используем /data (стандартный путь для Railway Volume)
+# Если /data недоступен, используем текущую директорию (для локальной разработки)
+STORAGE_DIR = os.getenv("STORAGE_PATH", "/data")
+if not os.path.exists(STORAGE_DIR):
+    # Если /data не существует (локальная разработка), используем текущую директорию
+    STORAGE_DIR = os.getcwd()
+    print(f"⚠️  /data не найден, используем текущую директорию: {STORAGE_DIR}")
+
+# Создаем директорию, если её нет
+Path(STORAGE_DIR).mkdir(parents=True, exist_ok=True)
+
+STORAGE_FILE = os.path.join(STORAGE_DIR, "email_accounts.json")
+print(f"📁 Файл хранилища: {STORAGE_FILE}")
 
 
 def load_accounts() -> Dict[str, dict]:
