@@ -17,10 +17,25 @@ def init_db_pool():
     """Инициализирует пул соединений с PostgreSQL."""
     global connection_pool
     
+    # Railway автоматически создает DATABASE_URL для всех сервисов в проекте
+    # Но если его нет, пробуем собрать из отдельных переменных
     database_url = os.getenv("DATABASE_URL")
+    
     if not database_url:
-        print("⚠️  DATABASE_URL не найден, PostgreSQL недоступен")
-        return None
+        # Пробуем собрать из отдельных переменных (Railway может создавать их отдельно)
+        pghost = os.getenv("PGHOST")
+        pgport = os.getenv("PGPORT", "5432")
+        pguser = os.getenv("PGUSER")
+        pgpassword = os.getenv("PGPASSWORD")
+        pgdatabase = os.getenv("PGDATABASE")
+        
+        if all([pghost, pguser, pgpassword, pgdatabase]):
+            database_url = f"postgresql://{pguser}:{pgpassword}@{pghost}:{pgport}/{pgdatabase}"
+            print(f"💡 DATABASE_URL собран из отдельных переменных")
+        else:
+            print("⚠️  DATABASE_URL не найден, PostgreSQL недоступен")
+            print(f"   Проверьте, что PostgreSQL добавлен в проект и переменные доступны")
+            return None
     
     try:
         # Создаем пул соединений (минимум 1, максимум 5)
@@ -29,10 +44,16 @@ def init_db_pool():
             database_url,
             cursor_factory=RealDictCursor
         )
-        print("✅ Пул соединений с PostgreSQL создан")
+        print(f"✅ Пул соединений с PostgreSQL создан")
+        # Показываем только хост для безопасности (не весь URL с паролем)
+        if "://" in database_url:
+            host_part = database_url.split("@")[-1].split("/")[0] if "@" in database_url else "unknown"
+            print(f"   Подключение к: {host_part}")
         return connection_pool
     except Exception as e:
-        print(f"⚠️  Ошибка при создании пула соединений PostgreSQL: {e}")
+        print(f"❌ Ошибка при создании пула соединений PostgreSQL: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
