@@ -84,6 +84,8 @@ def init_bot():
     print("   ✅ /search зарегистрирован")
     dp.message.register(handle_stats, Command("stats"))
     print("   ✅ /stats зарегистрирован")
+    dp.message.register(handle_status, Command("status"))
+    print("   ✅ /status зарегистрирован")
     dp.callback_query.register(handle_callback)
     print("   ✅ callback_query зарегистрирован")
     # Обработчик текстовых сообщений для FSM (должен быть последним)
@@ -133,6 +135,8 @@ def check_owner(func):
 async def handle_start(message: types.Message, **kwargs):
     """Обработчик команды /start."""
     try:
+        from app.email_client import check_account_status
+        
         # Генерируем дружелюбное приветствие через AI (с обработкой ошибок)
         try:
             greeting = generate_friendly_response(
@@ -141,6 +145,26 @@ async def handle_start(message: types.Message, **kwargs):
         except Exception as e:
             print(f"⚠️  Ошибка генерации приветствия через AI: {e}")
             greeting = "👋 Привет! Я Mail Agent AI - твой помощник для управления почтой."
+        
+        # Проверяем статус аккаунтов
+        status1 = await check_account_status(1)
+        status2 = await check_account_status(2)
+        
+        # Добавляем информацию о статусе
+        status_info = "\n\n📊 **Статус аккаунтов:**\n"
+        if status1["configured"]:
+            status_emoji = "✅" if status1["connected"] else "❌"
+            status_info += f"{status_emoji} Аккаунт 1: {status1['email'] or 'Не настроен'}\n"
+        else:
+            status_info += "⚪ Аккаунт 1: Не настроен\n"
+        
+        if status2["configured"]:
+            status_emoji = "✅" if status2["connected"] else "❌"
+            status_info += f"{status_emoji} Аккаунт 2: {status2['email'] or 'Не настроен'}\n"
+        else:
+            status_info += "⚪ Аккаунт 2: Не настроен\n"
+        
+        greeting += status_info
         
         keyboard = InlineKeyboardBuilder()
         
@@ -165,11 +189,16 @@ async def handle_start(message: types.Message, **kwargs):
             text="❓ Помощь",
             callback_data="show_help"
         ))
+        keyboard.add(InlineKeyboardButton(
+            text="📊 Статус",
+            callback_data="show_status"
+        ))
         
         await message.answer(
             f"{greeting}\n\n"
-            "Выберите аккаунт для настройки:\n\n"
-            "💡 Используйте `/help` для списка всех команд",
+            "Выберите действие:\n\n"
+            "💡 Используйте `/help` для списка всех команд\n"
+            "💡 Используйте `/status` для проверки статуса",
             reply_markup=keyboard.as_markup()
         )
         print(f"✅ Команда /start обработана для пользователя {message.from_user.id}")
@@ -197,6 +226,7 @@ async def handle_help(message: types.Message, **kwargs):
 `/search <запрос>` - Поиск по письмам
 `/thread <ID>` - Показать всю цепочку писем
 `/stats` - Статистика по письмам
+`/status` - Статус почтовых аккаунтов
 
 **Фильтры для /emails:**
 • `/emails` - все письма
@@ -259,6 +289,7 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
 `/search <запрос>` - Поиск по письмам
 `/thread <ID>` - Показать всю цепочку писем
 `/stats` - Статистика по письмам
+`/status` - Статус почтовых аккаунтов
 
 **Фильтры для /emails:**
 • `/emails` - все письма

@@ -600,6 +600,64 @@ def get_email_from_cache(local_id: str) -> Optional[dict]:
     return EMAIL_CACHE.get(local_id)
 
 
+async def check_account_status(account_id: int) -> dict:
+    """
+    Проверяет статус аккаунта (настроен ли, работает ли подключение).
+    
+    Args:
+        account_id: ID аккаунта (1 или 2)
+        
+    Returns:
+        Словарь со статусом:
+        {
+            "configured": bool,  # Настроен ли аккаунт
+            "connected": bool,   # Работает ли подключение
+            "email": str,       # Email адрес
+            "error": str        # Сообщение об ошибке (если есть)
+        }
+    """
+    from app.storage import get_account
+    
+    account = get_account(account_id)
+    
+    if not account:
+        return {
+            "configured": False,
+            "connected": False,
+            "email": None,
+            "error": "Аккаунт не настроен"
+        }
+    
+    imap_host = account.get("imap_host")
+    imap_user = account.get("imap_user")
+    imap_pass = account.get("imap_pass")
+    
+    if not all([imap_host, imap_user, imap_pass]):
+        return {
+            "configured": True,
+            "connected": False,
+            "email": imap_user,
+            "error": "Не все настройки заполнены"
+        }
+    
+    # Пытаемся подключиться
+    try:
+        connected, error_msg = await test_imap_connection(imap_host, imap_user, imap_pass)
+        return {
+            "configured": True,
+            "connected": connected,
+            "email": imap_user,
+            "error": error_msg if not connected else None
+        }
+    except Exception as e:
+        return {
+            "configured": True,
+            "connected": False,
+            "email": imap_user,
+            "error": f"Ошибка проверки: {str(e)}"
+        }
+
+
 async def test_imap_connection(imap_host: str, imap_user: str, imap_pass: str) -> tuple[bool, str]:
     """
     Тестирует подключение к IMAP серверу.
