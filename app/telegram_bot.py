@@ -178,7 +178,12 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         account_id = int(parts[1])
         provider = parts[2]
         
-        await callback.answer()
+        # Отвечаем на callback быстро
+        try:
+            await callback.answer()
+        except Exception as e:
+            print(f"⚠️  Ошибка при ответе на callback (query expired?): {e}")
+            # Продолжаем обработку
         
         if provider == "gmail":
             await state.update_data(account_id=account_id, provider="gmail")
@@ -206,18 +211,31 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
             )
     elif data.startswith("quick_reply:"):
         local_id = data.split(":", 1)[1]
-        await callback.answer("🔄 Анализирую письмо...")
+        
+        # Отвечаем на callback быстро, до долгих операций
+        try:
+            await callback.answer("🔄 Анализирую письмо...")
+        except Exception as e:
+            print(f"⚠️  Ошибка при ответе на callback (query expired?): {e}")
+            # Продолжаем обработку даже если callback истек
         
         # Получаем данные письма
         email_data = get_email_from_cache(local_id)
         if not email_data:
-            await callback.message.answer(
-                "❌ Письмо не найдено в кэше. Возможно, оно уже удалено."
-            )
+            try:
+                await callback.message.answer(
+                    "❌ Письмо не найдено в кэше. Возможно, оно уже удалено."
+                )
+            except Exception as e:
+                print(f"⚠️  Ошибка при отправке сообщения: {e}")
             return
         
         # Генерируем варианты ответов через AI
-        reply_options = suggest_reply_options(email_data)
+        try:
+            reply_options = suggest_reply_options(email_data)
+        except Exception as e:
+            print(f"⚠️  Ошибка при генерации вариантов ответов: {e}")
+            reply_options = {"suggestions": [], "context": "Не удалось сгенерировать варианты ответов"}
         
         # Создаем клавиатуру с вариантами ответов
         keyboard = InlineKeyboardBuilder()
@@ -263,7 +281,10 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         
         email_data = get_email_from_cache(local_id)
         if not email_data:
-            await callback.answer("❌ Письмо не найдено", show_alert=True)
+            try:
+                await callback.answer("❌ Письмо не найдено", show_alert=True)
+            except Exception as e:
+                print(f"⚠️  Ошибка при ответе на callback: {e}")
             return
         
         data_state = await state.get_data()
@@ -272,7 +293,10 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         
         if option_num <= len(suggestions):
             selected_reply = suggestions[option_num - 1]
-            await callback.answer("✅ Отправляю ответ...")
+            try:
+                await callback.answer("✅ Отправляю ответ...")
+            except Exception as e:
+                print(f"⚠️  Ошибка при ответе на callback: {e}")
             
             # Автоматически отправляем выбранный ответ
             account_id = email_data["account_id"]
