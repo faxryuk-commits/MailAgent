@@ -305,7 +305,7 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
                             f"💡 {priority_data.get('reason', '')}\n\n"
                             f"ID для ответа: `{local_id}`"
                         )
-                    await telegram_notify_func(message, local_id)
+                    await telegram_notify_func(message, local_id, priority_data.get("category"))
                 
             except Exception as e:
                 print(f"Ошибка при обработке письма {email_id}: {e}")
