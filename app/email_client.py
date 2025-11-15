@@ -13,7 +13,7 @@ from typing import Optional, List, Dict
 import asyncio
 
 from app.storage import get_account
-from app.ai_client import summarize_email
+from app.ai_client import summarize_email, analyze_email_priority_and_category
 
 # Кэш писем в памяти: {local_id: email_data}
 EMAIL_CACHE: Dict[str, dict] = {}
@@ -213,7 +213,22 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
                 timestamp_ms = int(datetime.now().timestamp() * 1000)
                 local_id = f"{account_id}-{timestamp_ms}"
                 
-                # Сохранение в кэш
+                # Временный email_data для анализа приоритета/категории
+                temp_email_data = {
+                    "from": from_addr,
+                    "subject": subject,
+                    "body": body,
+                    "summary": summary
+                }
+                
+                # Анализ приоритета и категории через AI
+                priority_data = await loop.run_in_executor(
+                    None, 
+                    analyze_email_priority_and_category, 
+                    temp_email_data
+                )
+                
+                # Сохранение в кэш с приоритетом и категорией
                 email_data = {
                     "local_id": local_id,
                     "account_id": account_id,
@@ -223,6 +238,9 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
                     "date_raw": date_raw,  # Сохраняем и исходную дату
                     "body": body,
                     "summary": summary,
+                    "priority": priority_data.get("priority", "medium"),
+                    "category": priority_data.get("category", "work"),
+                    "priority_reason": priority_data.get("reason", ""),
                     "original_msg": msg
                 }
                 
@@ -235,16 +253,58 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
                 
                 await loop.run_in_executor(None, mark_as_read)
                 
-                # Отправка уведомления в Telegram
+                # Формирование эмодзи для приоритета
+                priority_emoji = {
+                    "high": "🔴",
+                    "medium": "🟡",
+                    "low": "🟢"
+                }.get(priority_data.get("priority", "medium"), "🟡")
+                
+                # Формирование эмодзи для категории
+                category_emoji = {
+                    "work": "💼",
+                    "personal": "👤",
+                    "newsletter": "📰",
+                    "spam": "🗑️",
+                    "important": "⭐"
+                }.get(priority_data.get("category", "work"), "💼")
+                
+                category_name = {
+                    "work": "Работа",
+                    "personal": "Личное",
+                    "newsletter": "Рассылка",
+                    "spam": "Спам",
+                    "important": "Важное"
+                }.get(priority_data.get("category", "work"), "Работа")
+                
+                priority_name = {
+                    "high": "Высокий",
+                    "medium": "Средний",
+                    "low": "Низкий"
+                }.get(priority_data.get("priority", "medium"), "Средний")
+                
+                # Отправка уведомления в Telegram с приоритетом и категорией
                 if telegram_notify_func:
-                    message = (
-                        f"📧 Новое письмо (Аккаунт {account_id})\n\n"
-                        f"От: {from_addr}\n"
-                        f"Тема: {subject}\n"
-                        f"📅 Дата: {date_formatted}\n\n"
-                        f"📝 Резюме:\n{summary}\n\n"
-                        f"ID для ответа: `{local_id}`"
-                    )
+                    # Для спама и рассылок - более короткое уведомление
+                    if priority_data.get("category") in ["spam", "newsletter"]:
+                        message = (
+                            f"{category_emoji} {category_name} ({priority_emoji} {priority_name})\n\n"
+                            f"📧 От: {from_addr}\n"
+                            f"📝 Тема: {subject}\n"
+                            f"📅 {date_formatted}\n\n"
+                            f"💡 {summary}"
+                        )
+                    else:
+                        message = (
+                            f"{priority_emoji} {priority_name} приоритет | {category_emoji} {category_name}\n\n"
+                            f"📧 Новое письмо (Аккаунт {account_id})\n\n"
+                            f"От: {from_addr}\n"
+                            f"Тема: {subject}\n"
+                            f"📅 Дата: {date_formatted}\n\n"
+                            f"📝 Резюме:\n{summary}\n\n"
+                            f"💡 {priority_data.get('reason', '')}\n\n"
+                            f"ID для ответа: `{local_id}`"
+                        )
                     await telegram_notify_func(message, local_id)
                 
             except Exception as e:

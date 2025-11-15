@@ -74,6 +74,8 @@ def init_bot():
     print("   ✅ /start зарегистрирован")
     dp.message.register(handle_reply, Command("reply"))
     print("   ✅ /reply зарегистрирован")
+    dp.message.register(handle_emails, Command("emails"))
+    print("   ✅ /emails зарегистрирован")
     dp.callback_query.register(handle_callback)
     print("   ✅ callback_query зарегистрирован")
     # Обработчик текстовых сообщений для FSM (должен быть последним)
@@ -706,6 +708,99 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
         await message.answer(
             f"✅ Аккаунт {account_id} (Custom) успешно настроен!"
         )
+
+
+@check_owner
+@check_owner
+async def handle_emails(message: types.Message, **kwargs):
+    """Обработчик команды /emails [фильтр]."""
+    from app.email_client import EMAIL_CACHE
+    
+    text = message.text.strip()
+    parts = text.split()
+    
+    # Определяем фильтр
+    filter_type = None
+    filter_value = None
+    
+    if len(parts) > 1:
+        filter_value = parts[1].lower()
+    
+    # Получаем все письма из кэша
+    all_emails = list(EMAIL_CACHE.values())
+    
+    # Сортируем по дате (новые первыми)
+    all_emails.sort(key=lambda x: x.get('date_raw', ''), reverse=True)
+    
+    # Применяем фильтры
+    if filter_value:
+        if filter_value in ["work", "personal", "newsletter", "spam", "important"]:
+            all_emails = [e for e in all_emails if e.get('category') == filter_value]
+            filter_type = "category"
+        elif filter_value in ["high", "medium", "low"]:
+            all_emails = [e for e in all_emails if e.get('priority') == filter_value]
+            filter_type = "priority"
+        elif filter_value == "today":
+            from datetime import datetime, timedelta
+            today = datetime.now().date()
+            all_emails = [
+                e for e in all_emails 
+                if e.get('date_raw') and 
+                datetime.strptime(e.get('date_raw', '').split(',')[0] if ',' in e.get('date_raw', '') else e.get('date_raw', ''), '%d %b %Y').date() == today
+            ]
+            filter_type = "date"
+    
+    if not all_emails:
+        await message.answer(
+            f"📭 Писем не найдено" + 
+            (f" (фильтр: {filter_value})" if filter_value else "")
+        )
+        return
+    
+    # Ограничиваем до 20 писем для отображения
+    emails_to_show = all_emails[:20]
+    
+    # Формируем сообщение
+    priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+    category_emoji = {
+        "work": "💼", "personal": "👤", "newsletter": "📰", 
+        "spam": "🗑️", "important": "⭐"
+    }
+    category_name = {
+        "work": "Работа", "personal": "Личное", "newsletter": "Рассылка",
+        "spam": "Спам", "important": "Важное"
+    }
+    
+    result_text = f"📧 Найдено писем: {len(all_emails)}\n"
+    if filter_value:
+        result_text += f"🔍 Фильтр: {filter_value}\n"
+    result_text += f"\n"
+    
+    for i, email_data in enumerate(emails_to_show, 1):
+        priority = email_data.get('priority', 'medium')
+        category = email_data.get('category', 'work')
+        
+        result_text += (
+            f"{i}. {priority_emoji.get(priority, '🟡')} {category_emoji.get(category, '💼')} "
+            f"{email_data.get('from', 'Неизвестно')[:30]}\n"
+            f"   📝 {email_data.get('subject', 'Без темы')[:40]}\n"
+            f"   📅 {email_data.get('date', '')}\n"
+            f"   ID: `{email_data.get('local_id', '')}`\n\n"
+        )
+    
+    if len(all_emails) > 20:
+        result_text += f"\n... и еще {len(all_emails) - 20} писем"
+    
+    result_text += (
+        f"\n\n💡 Используйте фильтры:\n"
+        f"`/emails work` - только рабочие\n"
+        f"`/emails important` - только важные\n"
+        f"`/emails high` - высокий приоритет\n"
+        f"`/emails newsletter` - рассылки\n"
+        f"`/emails today` - за сегодня"
+    )
+    
+    await message.answer(result_text, parse_mode="Markdown")
 
 
 @check_owner

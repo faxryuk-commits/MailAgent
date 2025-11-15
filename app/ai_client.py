@@ -205,6 +205,87 @@ def generate_friendly_response(context: str, user_message: str = None) -> str:
         return "Понял! Продолжаем."
 
 
+def analyze_email_priority_and_category(email_data: dict) -> dict:
+    """
+    Анализирует письмо и определяет приоритет и категорию через AI.
+    
+    Args:
+        email_data: Данные письма (from, subject, body, summary)
+        
+    Returns:
+        Словарь с приоритетом и категорией:
+        {
+            "priority": "high" | "medium" | "low",
+            "category": "work" | "personal" | "newsletter" | "spam" | "important",
+            "reason": "объяснение почему такой приоритет/категория"
+        }
+    """
+    if not client:
+        init_openai()
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": """Ты помощник для анализа писем. Определяй приоритет и категорию письма.
+
+Приоритеты:
+- "high" - срочное, требует немедленного ответа (дедлайны, проблемы, важные запросы)
+- "medium" - обычное письмо, можно ответить в течение дня
+- "low" - не срочное, рассылки, информационные письма
+
+Категории:
+- "work" - рабочая переписка, деловые вопросы
+- "personal" - личная переписка
+- "newsletter" - рассылки, новости, реклама
+- "spam" - спам, нежелательные письма
+- "important" - важные письма (от руководства, клиентов, партнеров)
+
+Отвечай в формате JSON."""
+                },
+                {
+                    "role": "user",
+                    "content": f"""Письмо:
+От: {email_data.get('from', 'Неизвестно')}
+Тема: {email_data.get('subject', 'Без темы')}
+Резюме: {email_data.get('summary', '')}
+Текст (первые 500 символов): {email_data.get('body', '')[:500]}
+
+Определи приоритет и категорию. Ответ в формате JSON:
+{{
+    "priority": "high" | "medium" | "low",
+    "category": "work" | "personal" | "newsletter" | "spam" | "important",
+    "reason": "краткое объяснение (1 предложение)"
+}}"""
+                }
+            ],
+            temperature=0.3,
+            max_tokens=200,
+            response_format={"type": "json_object"}
+        )
+        
+        import json
+        result = json.loads(response.choices[0].message.content.strip())
+        
+        # Валидация результата
+        if result.get("priority") not in ["high", "medium", "low"]:
+            result["priority"] = "medium"
+        if result.get("category") not in ["work", "personal", "newsletter", "spam", "important"]:
+            result["category"] = "work"
+        
+        return result
+    except Exception as e:
+        print(f"Ошибка при анализе приоритета/категории: {e}")
+        # Значения по умолчанию
+        return {
+            "priority": "medium",
+            "category": "work",
+            "reason": "Не удалось проанализировать автоматически"
+        }
+
+
 def suggest_reply_options(email_data: dict) -> dict:
     """
     Генерирует варианты ответов на письмо через AI.
