@@ -89,6 +89,47 @@ def get_email_thread(email_data: dict) -> List[dict]:
     return get_thread_emails(thread_id)
 
 
+def search_emails(query: str, limit: int = 20) -> List[dict]:
+    """
+    Ищет письма по запросу.
+    
+    Args:
+        query: Поисковый запрос (ищет в теме, отправителе, содержимом)
+        limit: Максимальное количество результатов
+        
+    Returns:
+        Список найденных писем, отсортированных по дате (новые первыми)
+    """
+    if not query:
+        return []
+    
+    query_lower = query.lower().strip()
+    results = []
+    
+    for email_data in EMAIL_CACHE.values():
+        # Поиск в теме
+        subject = email_data.get('subject', '').lower()
+        # Поиск в отправителе
+        from_addr = email_data.get('from', '').lower()
+        # Поиск в резюме
+        summary = email_data.get('summary', '').lower()
+        # Поиск в теле письма (первые 500 символов)
+        body = email_data.get('body', '').lower()[:500]
+        
+        # Проверяем, содержит ли хотя бы одно поле запрос
+        if (query_lower in subject or 
+            query_lower in from_addr or 
+            query_lower in summary or 
+            query_lower in body):
+            results.append(email_data)
+    
+    # Сортируем по дате (новые первыми)
+    results.sort(key=lambda x: x.get('date_raw', ''), reverse=True)
+    
+    # Ограничиваем количество результатов
+    return results[:limit]
+
+
 def decode_mime_words(s):
     """Декодирует MIME-заголовки."""
     if s is None:
