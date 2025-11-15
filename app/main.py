@@ -52,31 +52,47 @@ async def email_checker_loop():
     while running:
         try:
             accounts = load_accounts()
+            print(f"📋 Загружено аккаунтов для проверки: {len(accounts)} ({list(accounts.keys())})")
             
             # Проверяем оба аккаунта
             if "1" in accounts:
-                print(f"Проверка аккаунта 1...")
+                print(f"📧 Проверка аккаунта 1...")
                 try:
                     emails = await check_account_emails(1, telegram_notify_func=send_notification)
                     if emails:
-                        print(f"  Найдено новых писем: {len(emails)}")
+                        print(f"  ✅ Найдено новых писем: {len(emails)}")
+                    else:
+                        print(f"  ℹ️  Новых писем нет")
                 except Exception as e:
-                    print(f"  Ошибка при проверке аккаунта 1: {e}")
+                    print(f"  ❌ Ошибка при проверке аккаунта 1: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"  ⚪ Аккаунт 1 не настроен")
             
             if "2" in accounts:
-                print(f"Проверка аккаунта 2...")
+                print(f"📧 Проверка аккаунта 2...")
                 try:
                     emails = await check_account_emails(2, telegram_notify_func=send_notification)
                     if emails:
-                        print(f"  Найдено новых писем: {len(emails)}")
+                        print(f"  ✅ Найдено новых писем: {len(emails)}")
+                    else:
+                        print(f"  ℹ️  Новых писем нет")
                 except Exception as e:
-                    print(f"  Ошибка при проверке аккаунта 2: {e}")
+                    print(f"  ❌ Ошибка при проверке аккаунта 2: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"  ⚪ Аккаунт 2 не настроен")
             
+            print(f"⏳ Ожидание {CHECK_INTERVAL} секунд до следующей проверки...")
             # Ждём перед следующей проверкой
             await asyncio.sleep(CHECK_INTERVAL)
             
         except Exception as e:
-            print(f"Ошибка в цикле проверки почты: {e}")
+            print(f"❌ Ошибка в цикле проверки почты: {e}")
+            import traceback
+            traceback.print_exc()
             await asyncio.sleep(CHECK_INTERVAL)
 
 

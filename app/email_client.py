@@ -314,8 +314,10 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
     Returns:
         Список новых писем
     """
+    print(f"  🔍 Начинаю проверку аккаунта {account_id}...")
     account = get_account(account_id)
     if not account:
+        print(f"  ⚠️  Аккаунт {account_id} не найден в хранилище")
         return []
     
     imap_host = account.get("imap_host")
@@ -323,8 +325,10 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
     imap_pass = account.get("imap_pass")
     
     if not all([imap_host, imap_user, imap_pass]):
+        print(f"  ⚠️  Не все настройки аккаунта {account_id} заполнены")
         return []
     
+    print(f"  📧 Подключение к {imap_host} для {imap_user}...")
     new_emails = []
     
     try:
@@ -363,7 +367,7 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
         # Ограничиваем количество писем за раз (максимум 10)
         email_ids = email_ids[:10]
         
-        print(f"Найдено новых писем: {len(email_ids)}")
+        print(f"  📬 Найдено непрочитанных писем: {len(email_ids)}")
         
         for email_id_bytes in email_ids:
             try:
