@@ -91,6 +91,7 @@ def migrate_old_accounts() -> None:
 migrate_old_accounts()
 
 # Инициализируем PostgreSQL при импорте (если доступен)
+print("🔄 Попытка инициализации PostgreSQL...")
 if POSTGRESQL_AVAILABLE:
     try:
         pool = init_db_pool()
@@ -98,8 +99,14 @@ if POSTGRESQL_AVAILABLE:
             # Создаем таблицы при первом запуске
             create_tables()
             print("✅ PostgreSQL инициализирован и готов к работе")
+        else:
+            print("⚠️  Не удалось создать пул соединений PostgreSQL")
     except Exception as e:
         print(f"⚠️  Ошибка при инициализации PostgreSQL: {e}")
+        import traceback
+        traceback.print_exc()
+else:
+    print("⚠️  PostgreSQL модуль недоступен (psycopg2 не установлен?)")
 
 
 def load_accounts() -> Dict[str, dict]:

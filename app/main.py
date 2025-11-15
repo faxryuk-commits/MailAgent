@@ -114,6 +114,27 @@ async def main():
     
     print("Инициализация сервисов...")
     
+    # Проверка PostgreSQL подключения
+    print("\n🔍 Проверка подключения к PostgreSQL...")
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        print(f"✅ DATABASE_URL найден (длина: {len(database_url)} символов)")
+        # Показываем только хост для безопасности
+        if "@" in database_url:
+            host_part = database_url.split("@")[-1].split("/")[0]
+            print(f"   Хост: {host_part}")
+    else:
+        print("⚠️  DATABASE_URL не найден")
+        # Проверяем отдельные переменные
+        pghost = os.getenv("PGHOST")
+        pguser = os.getenv("PGUSER")
+        if pghost and pguser:
+            print(f"💡 Найдены отдельные переменные: PGHOST={pghost}, PGUSER={pguser}")
+        else:
+            print("   PostgreSQL переменные не найдены")
+            print("   💡 Убедитесь, что PostgreSQL добавлен в проект Railway")
+            print("   💡 Railway должен автоматически создать DATABASE_URL для всех сервисов")
+    
     # Проверка хранилища (импорт storage.py уже вывел путь к файлу)
     from app.storage import STORAGE_FILE, STORAGE_DIR
     try:
@@ -127,13 +148,18 @@ async def main():
             else:
                 print(f"⚠️  Используется локальное хранилище: {STORAGE_DIR}")
                 print("   Для постоянного хранения на Railway настройте PostgreSQL или Volume")
-    except ImportError:
+    except ImportError as e:
+        print(f"⚠️  Не удалось импортировать db_storage: {e}")
         print(f"💾 Хранилище: {STORAGE_DIR}")
         if STORAGE_DIR == "/data":
             print("✅ Используется Railway Volume (данные сохраняются между деплоями)")
         else:
             print(f"⚠️  Используется локальное хранилище: {STORAGE_DIR}")
             print("   Для постоянного хранения на Railway настройте PostgreSQL или Volume")
+    except Exception as e:
+        print(f"⚠️  Ошибка при проверке PostgreSQL: {e}")
+        import traceback
+        traceback.print_exc()
     
     # Инициализация OpenAI
     try:
