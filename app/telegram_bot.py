@@ -131,6 +131,116 @@ def check_owner(func):
     return wrapper
 
 
+def get_main_menu_keyboard() -> InlineKeyboardMarkup:
+    """Создает главное меню с основными разделами."""
+    keyboard = InlineKeyboardBuilder()
+    
+    keyboard.add(InlineKeyboardButton(
+        text="📧 Письма",
+        callback_data="menu:emails"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="🔍 Поиск",
+        callback_data="menu:search"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="📊 Статистика",
+        callback_data="menu:stats"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="📬 Цепочки",
+        callback_data="menu:threads"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="⚙️ Настройки",
+        callback_data="menu:settings"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="❓ Помощь",
+        callback_data="show_help"
+    ))
+    
+    keyboard.adjust(2)  # 2 кнопки в ряд
+    
+    return keyboard.as_markup()
+
+
+def get_emails_menu_keyboard() -> InlineKeyboardMarkup:
+    """Создает меню фильтров писем."""
+    keyboard = InlineKeyboardBuilder()
+    
+    keyboard.add(InlineKeyboardButton(
+        text="📧 Все письма",
+        callback_data="emails:all"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="💼 Рабочие",
+        callback_data="emails:work"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="⭐ Важные",
+        callback_data="emails:important"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="🔴 Высокий приоритет",
+        callback_data="emails:high"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="📰 Рассылки",
+        callback_data="emails:newsletter"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="🗑️ Спам",
+        callback_data="emails:spam"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="📅 Сегодня",
+        callback_data="emails:today"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="◀️ Назад",
+        callback_data="menu:main"
+    ))
+    
+    keyboard.adjust(2)  # 2 кнопки в ряд
+    
+    return keyboard.as_markup()
+
+
+def get_settings_menu_keyboard() -> InlineKeyboardMarkup:
+    """Создает меню настроек."""
+    keyboard = InlineKeyboardBuilder()
+    
+    keyboard.add(InlineKeyboardButton(
+        text="📧 Аккаунт 1 — Gmail",
+        callback_data="setup:1:gmail"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="📧 Аккаунт 1 — Другая почта",
+        callback_data="setup:1:custom"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="📧 Аккаунт 2 — Gmail",
+        callback_data="setup:2:gmail"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="📧 Аккаунт 2 — Другая почта",
+        callback_data="setup:2:custom"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="📊 Статус аккаунтов",
+        callback_data="show_status"
+    ))
+    keyboard.add(InlineKeyboardButton(
+        text="◀️ Назад",
+        callback_data="menu:main"
+    ))
+    
+    keyboard.adjust(2)  # 2 кнопки в ряд
+    
+    return keyboard.as_markup()
+
+
 @check_owner
 async def handle_start(message: types.Message, **kwargs):
     """Обработчик команды /start."""
@@ -166,40 +276,13 @@ async def handle_start(message: types.Message, **kwargs):
         
         greeting += status_info
         
-        keyboard = InlineKeyboardBuilder()
-        
-        keyboard.add(InlineKeyboardButton(
-            text="Аккаунт 1 — Gmail",
-            callback_data="setup:1:gmail"
-        ))
-        keyboard.add(InlineKeyboardButton(
-            text="Аккаунт 1 — Другая почта",
-            callback_data="setup:1:custom"
-        ))
-        keyboard.add(InlineKeyboardButton(
-            text="Аккаунт 2 — Gmail",
-            callback_data="setup:2:gmail"
-        ))
-        keyboard.add(InlineKeyboardButton(
-            text="Аккаунт 2 — Другая почта",
-            callback_data="setup:2:custom"
-        ))
-        
-        keyboard.add(InlineKeyboardButton(
-            text="❓ Помощь",
-            callback_data="show_help"
-        ))
-        keyboard.add(InlineKeyboardButton(
-            text="📊 Статус",
-            callback_data="show_status"
-        ))
-        
+        # Используем главное меню
         await message.answer(
             f"{greeting}\n\n"
-            "Выберите действие:\n\n"
-            "💡 Используйте `/help` для списка всех команд\n"
-            "💡 Используйте `/status` для проверки статуса",
-            reply_markup=keyboard.as_markup()
+            "📱 **Главное меню**\n\n"
+            "Выберите раздел:",
+            reply_markup=get_main_menu_keyboard(),
+            parse_mode="Markdown"
         )
         print(f"✅ Команда /start обработана для пользователя {message.from_user.id}")
     except Exception as e:
