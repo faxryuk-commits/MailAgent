@@ -54,20 +54,33 @@ def init_bot():
     """Инициализирует бота и диспетчер."""
     global bot, dp
     
+    print("🔄 Инициализация Telegram бота...")
+    
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token:
         raise ValueError("TELEGRAM_BOT_TOKEN не установлен в переменных окружения")
+    
+    print(f"✅ TELEGRAM_BOT_TOKEN получен (длина: {len(token)})")
     
     bot = Bot(token=token)
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
     
+    print("✅ Bot и Dispatcher созданы")
+    
     # Регистрация обработчиков (важен порядок - более специфичные первыми)
+    print("🔄 Регистрация обработчиков...")
     dp.message.register(handle_start, Command("start"))
+    print("   ✅ /start зарегистрирован")
     dp.message.register(handle_reply, Command("reply"))
+    print("   ✅ /reply зарегистрирован")
     dp.callback_query.register(handle_callback)
+    print("   ✅ callback_query зарегистрирован")
     # Обработчик текстовых сообщений для FSM (должен быть последним)
     dp.message.register(handle_text_message)
+    print("   ✅ text messages зарегистрирован")
+    
+    print(f"✅ OWNER_TELEGRAM_ID: {OWNER_TELEGRAM_ID}")
     
     return bot, dp
 
@@ -88,10 +101,20 @@ def check_owner(func):
                 user_id = user_id.id
             answer_func = None
         
+        if OWNER_TELEGRAM_ID == 0:
+            print("⚠️  OWNER_TELEGRAM_ID не установлен! Пропускаем проверку.")
+            return await func(event, *args, **kwargs)
+        
         if user_id != OWNER_TELEGRAM_ID:
+            print(f"⚠️  Доступ запрещен: user_id={user_id}, OWNER_TELEGRAM_ID={OWNER_TELEGRAM_ID}")
             if answer_func:
-                await answer_func("❌ У вас нет доступа к этому боту.")
+                try:
+                    await answer_func("❌ У вас нет доступа к этому боту.")
+                except Exception as e:
+                    print(f"⚠️  Ошибка при отправке сообщения об отказе: {e}")
             return
+        
+        print(f"✅ Доступ разрешен: user_id={user_id}")
         return await func(event, *args, **kwargs)
     return wrapper
 
@@ -99,35 +122,49 @@ def check_owner(func):
 @check_owner
 async def handle_start(message: types.Message, **kwargs):
     """Обработчик команды /start."""
-    # Генерируем дружелюбное приветствие через AI
-    greeting = generate_friendly_response(
-        "Пользователь запустил бота. Нужно поприветствовать и предложить настроить почтовый аккаунт."
-    )
-    
-    keyboard = InlineKeyboardBuilder()
-    
-    keyboard.add(InlineKeyboardButton(
-        text="Аккаунт 1 — Gmail",
-        callback_data="setup:1:gmail"
-    ))
-    keyboard.add(InlineKeyboardButton(
-        text="Аккаунт 1 — Другая почта",
-        callback_data="setup:1:custom"
-    ))
-    keyboard.add(InlineKeyboardButton(
-        text="Аккаунт 2 — Gmail",
-        callback_data="setup:2:gmail"
-    ))
-    keyboard.add(InlineKeyboardButton(
-        text="Аккаунт 2 — Другая почта",
-        callback_data="setup:2:custom"
-    ))
-    
-    await message.answer(
-        f"{greeting}\n\n"
-        "Выберите аккаунт для настройки:",
-        reply_markup=keyboard.as_markup()
-    )
+    try:
+        # Генерируем дружелюбное приветствие через AI (с обработкой ошибок)
+        try:
+            greeting = generate_friendly_response(
+                "Пользователь запустил бота. Нужно поприветствовать и предложить настроить почтовый аккаунт."
+            )
+        except Exception as e:
+            print(f"⚠️  Ошибка генерации приветствия через AI: {e}")
+            greeting = "👋 Привет! Я Mail Agent AI - твой помощник для управления почтой."
+        
+        keyboard = InlineKeyboardBuilder()
+        
+        keyboard.add(InlineKeyboardButton(
+            text="Аккаунт 1 — Gmail",
+            callback_data="setup:1:gmail"
+        ))
+        keyboard.add(InlineKeyboardButton(
+            text="Аккаунт 1 — Другая почта",
+            callback_data="setup:1:custom"
+        ))
+        keyboard.add(InlineKeyboardButton(
+            text="Аккаунт 2 — Gmail",
+            callback_data="setup:2:gmail"
+        ))
+        keyboard.add(InlineKeyboardButton(
+            text="Аккаунт 2 — Другая почта",
+            callback_data="setup:2:custom"
+        ))
+        
+        await message.answer(
+            f"{greeting}\n\n"
+            "Выберите аккаунт для настройки:",
+            reply_markup=keyboard.as_markup()
+        )
+        print(f"✅ Команда /start обработана для пользователя {message.from_user.id}")
+    except Exception as e:
+        print(f"❌ Ошибка в handle_start: {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await message.answer("❌ Произошла ошибка при обработке команды. Попробуйте позже.")
+        except:
+            pass
 
 
 @check_owner
@@ -756,12 +793,25 @@ async def start_polling():
     global bot, dp
     
     if not bot or not dp:
+        print("🔄 Инициализация бота перед запуском polling...")
         bot, dp = init_bot()
+        print("✅ Бот инициализирован")
     
     print("🔄 Запуск polling...")
+    print(f"✅ OWNER_TELEGRAM_ID: {OWNER_TELEGRAM_ID}")
+    print(f"✅ Обработчики зарегистрированы:")
+    print(f"   - /start")
+    print(f"   - /reply")
+    print(f"   - callback_query")
+    print(f"   - text messages")
+    
     try:
-        await dp.start_polling(bot, skip_updates=True)
+        # В aiogram 3.x правильный способ запуска polling
+        await dp.start_polling(bot, skip_updates=True, allowed_updates=["message", "callback_query"])
+        print("✅ Polling запущен успешно")
     except Exception as e:
         print(f"❌ Ошибка при запуске polling: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
