@@ -11,6 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.exceptions import TelegramBadRequest
 
 from app.storage import save_account, get_account, load_accounts
 from app.email_client import send_email_smtp, get_email_from_cache, test_imap_connection
@@ -241,6 +242,36 @@ def get_settings_menu_keyboard() -> InlineKeyboardMarkup:
     return keyboard.as_markup()
 
 
+async def safe_edit_text(message, text: str, reply_markup=None, parse_mode=None):
+    """
+    Безопасно редактирует текст сообщения, обрабатывая ошибку "message is not modified".
+    
+    Args:
+        message: Объект сообщения для редактирования
+        text: Новый текст
+        reply_markup: Клавиатура (опционально)
+        parse_mode: Режим парсинга (опционально)
+    """
+    try:
+        await message.edit_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
+    except TelegramBadRequest as e:
+        # Игнорируем ошибку "message is not modified" - это нормально
+        if "message is not modified" in str(e).lower():
+            # Просто отвечаем на callback, чтобы убрать индикатор загрузки
+            try:
+                if hasattr(message, 'answer'):
+                    await message.answer()
+            except:
+                pass
+        else:
+            # Другие ошибки логируем
+            print(f"⚠️  Ошибка при редактировании сообщения: {e}")
+            raise
+    except Exception as e:
+        print(f"⚠️  Неожиданная ошибка при редактировании сообщения: {e}")
+        raise
+
+
 @check_owner
 async def handle_start(message: types.Message, **kwargs):
     """Обработчик команды /start."""
@@ -398,7 +429,8 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         else:
             status_info += "⚪ Аккаунт 2: Не настроен\n"
         
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             f"📱 **Mail Agent AI**\n\n{status_info}\n\nВыберите раздел:",
             reply_markup=get_main_menu_keyboard(),
             parse_mode="Markdown"
@@ -411,7 +443,8 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         except:
             pass
         
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             "📧 **Письма**\n\nВыберите фильтр:",
             reply_markup=get_emails_menu_keyboard(),
             parse_mode="Markdown"
@@ -424,7 +457,8 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         except:
             pass
         
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             "🔍 **Поиск по письмам**\n\n"
             "Введите поисковый запрос:\n\n"
             "Примеры:\n"
@@ -451,7 +485,8 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         stats = get_email_statistics()
         
         if stats["total"] == 0:
-            await callback.message.edit_text(
+            await safe_edit_text(
+                callback.message,
                 "📊 **Статистика**\n\n❌ Писем в кэше нет.\n\n"
                 "💡 Дождитесь получения новых писем.",
                 reply_markup=InlineKeyboardBuilder().add(
@@ -508,7 +543,8 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         keyboard = InlineKeyboardBuilder()
         keyboard.add(InlineKeyboardButton(text="◀️ Назад", callback_data="menu:main"))
         
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             result_text,
             reply_markup=keyboard.as_markup(),
             parse_mode="Markdown"
@@ -521,7 +557,8 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         except:
             pass
         
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             "📬 **Цепочки переписки**\n\n"
             "Для просмотра цепочки писем используйте команду:\n"
             "`/thread <ID>`\n\n"
@@ -540,7 +577,8 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         except:
             pass
         
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             "⚙️ **Настройки**\n\nВыберите действие:",
             reply_markup=get_settings_menu_keyboard(),
             parse_mode="Markdown"
@@ -575,7 +613,8 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
                 all_emails = filtered_emails
         
         if not all_emails:
-            await callback.message.edit_text(
+            await safe_edit_text(
+                callback.message,
                 f"📭 Писем не найдено" + 
                 (f" (фильтр: {filter_type})" if filter_type != "all" else ""),
                 reply_markup=get_emails_menu_keyboard(),
@@ -611,7 +650,8 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         if len(all_emails) > 20:
             result_text += f"\n... и еще {len(all_emails) - 20} писем"
         
-        await callback.message.edit_text(
+        await safe_edit_text(
+            callback.message,
             result_text,
             reply_markup=get_emails_menu_keyboard(),
             parse_mode="Markdown"
@@ -679,7 +719,7 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         
         keyboard = InlineKeyboardBuilder()
         keyboard.add(InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:main"))
-        await callback.message.edit_text(result_text, reply_markup=keyboard.as_markup(), parse_mode="Markdown")
+        await safe_edit_text(callback.message, result_text, reply_markup=keyboard.as_markup(), parse_mode="Markdown")
         return
     
     if data == "show_help":
@@ -738,7 +778,7 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
 """
         keyboard = InlineKeyboardBuilder()
         keyboard.add(InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:main"))
-        await callback.message.edit_text(help_text, reply_markup=keyboard.as_markup(), parse_mode="Markdown")
+        await safe_edit_text(callback.message, help_text, reply_markup=keyboard.as_markup(), parse_mode="Markdown")
         return
     
     if data.startswith("setup:"):
