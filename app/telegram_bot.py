@@ -5,7 +5,7 @@ import os
 import asyncio
 from typing import Optional
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
+from aiogram.filters import Command, F
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -93,7 +93,7 @@ def init_bot():
     dp.callback_query.register(handle_callback)
     print("   ✅ callback_query зарегистрирован")
     # Обработчик голосовых сообщений
-    dp.message.register(handle_voice_message, types.ContentType.VOICE)
+    dp.message.register(handle_voice_message, F.voice)
     print("   ✅ voice messages зарегистрирован")
     # Обработчик текстовых сообщений для FSM (должен быть последним)
     dp.message.register(handle_text_message)
