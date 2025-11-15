@@ -246,6 +246,11 @@ async def handle_start(message: types.Message, **kwargs):
     """Обработчик команды /start."""
     try:
         from app.email_client import check_account_status
+        from app.storage import load_accounts
+        
+        # Проверяем, что аккаунты не потерялись
+        accounts_before = load_accounts()
+        print(f"📋 Аккаунты до /start: {list(accounts_before.keys())}")
         
         # Генерируем дружелюбное приветствие через AI (с обработкой ошибок)
         try:
@@ -256,9 +261,22 @@ async def handle_start(message: types.Message, **kwargs):
             print(f"⚠️  Ошибка генерации приветствия через AI: {e}")
             greeting = "👋 Привет! Я Mail Agent AI - твой помощник для управления почтой."
         
-        # Проверяем статус аккаунтов
-        status1 = await check_account_status(1)
-        status2 = await check_account_status(2)
+        # Проверяем статус аккаунтов (только чтение, не изменяет данные)
+        try:
+            status1 = await check_account_status(1)
+            status2 = await check_account_status(2)
+        except Exception as e:
+            print(f"⚠️  Ошибка при проверке статуса: {e}")
+            # Если ошибка, используем данные из загруженных аккаунтов
+            status1 = {"configured": "1" in accounts_before, "connected": False, "email": accounts_before.get("1", {}).get("imap_user") if "1" in accounts_before else None}
+            status2 = {"configured": "2" in accounts_before, "connected": False, "email": accounts_before.get("2", {}).get("imap_user") if "2" in accounts_before else None}
+        
+        # Проверяем, что аккаунты не потерялись после проверки статуса
+        accounts_after = load_accounts()
+        print(f"📋 Аккаунты после проверки статуса: {list(accounts_after.keys())}")
+        
+        if len(accounts_before) > len(accounts_after):
+            print(f"⚠️  ВНИМАНИЕ! Потеряны аккаунты! Было: {list(accounts_before.keys())}, Стало: {list(accounts_after.keys())}")
         
         # Добавляем информацию о статусе
         status_info = "\n\n📊 **Статус аккаунтов:**\n"

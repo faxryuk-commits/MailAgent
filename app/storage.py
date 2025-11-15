@@ -22,8 +22,18 @@ def load_accounts() -> Dict[str, dict]:
 
 def save_accounts(accounts: Dict[str, dict]) -> None:
     """Сохраняет аккаунты в email_accounts.json."""
-    with open(STORAGE_FILE, 'w', encoding='utf-8') as f:
-        json.dump(accounts, f, indent=2, ensure_ascii=False)
+    # Защита от случайной перезаписи пустым словарем
+    if not accounts:
+        print("⚠️  Попытка сохранить пустой словарь аккаунтов! Пропускаем сохранение.")
+        return
+    
+    try:
+        with open(STORAGE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(accounts, f, indent=2, ensure_ascii=False)
+        print(f"✅ Аккаунты сохранены: {list(accounts.keys())}")
+    except Exception as e:
+        print(f"❌ Ошибка при сохранении аккаунтов: {e}")
+        raise
 
 
 def get_account(account_id: int) -> Optional[dict]:
@@ -35,6 +45,8 @@ def get_account(account_id: int) -> Optional[dict]:
 def save_account(account_id: int, account_data: dict) -> None:
     """Сохраняет настройки одного аккаунта."""
     accounts = load_accounts()
+    # Сохраняем существующие данные других аккаунтов
     accounts[str(account_id)] = account_data
     save_accounts(accounts)
+    print(f"✅ Аккаунт {account_id} сохранен. Всего аккаунтов: {len(accounts)}")
 
