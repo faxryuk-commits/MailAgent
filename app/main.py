@@ -116,12 +116,24 @@ async def main():
     
     # Проверка хранилища (импорт storage.py уже вывел путь к файлу)
     from app.storage import STORAGE_FILE, STORAGE_DIR
-    print(f"💾 Хранилище: {STORAGE_DIR}")
-    if STORAGE_DIR == "/data":
-        print("✅ Используется Railway Volume (данные сохраняются между деплоями)")
-    else:
-        print(f"⚠️  Используется локальное хранилище: {STORAGE_DIR}")
-        print("   Для постоянного хранения на Railway настройте Volume (см. RAILWAY_VOLUME_SETUP.md)")
+    try:
+        from app.db_storage import is_postgresql_available
+        if is_postgresql_available():
+            print("💾 Хранилище: PostgreSQL (данные сохраняются между деплоями)")
+        else:
+            print(f"💾 Хранилище: {STORAGE_DIR}")
+            if STORAGE_DIR == "/data":
+                print("✅ Используется Railway Volume (данные сохраняются между деплоями)")
+            else:
+                print(f"⚠️  Используется локальное хранилище: {STORAGE_DIR}")
+                print("   Для постоянного хранения на Railway настройте PostgreSQL или Volume")
+    except ImportError:
+        print(f"💾 Хранилище: {STORAGE_DIR}")
+        if STORAGE_DIR == "/data":
+            print("✅ Используется Railway Volume (данные сохраняются между деплоями)")
+        else:
+            print(f"⚠️  Используется локальное хранилище: {STORAGE_DIR}")
+            print("   Для постоянного хранения на Railway настройте PostgreSQL или Volume")
     
     # Инициализация OpenAI
     try:
