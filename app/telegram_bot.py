@@ -1106,7 +1106,8 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
         await state.clear()
         await message.answer(
             f"✅ Аккаунт {account_id} (Gmail) успешно настроен через OAuth2!\n\n"
-            "Бот будет проверять почту каждую минуту."
+            "Бот будет проверять почту каждую минуту.",
+            reply_markup=get_main_menu_keyboard()
         )
     
     elif current_state == SetupStates.gmail_pass.state:
@@ -1211,7 +1212,8 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
             f"Аккаунт {account_id} (Gmail) успешно настроен! Бот будет проверять почту автоматически."
         )
         await message.answer(
-            f"✅ {success_msg}"
+            f"✅ {success_msg}",
+            reply_markup=get_main_menu_keyboard()
         )
     
     elif current_state == SetupStates.custom_imap_host.state:
@@ -1280,7 +1282,8 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
         save_account(account_id, account_data)
         await state.clear()
         await message.answer(
-            f"✅ Аккаунт {account_id} (Custom) успешно настроен!"
+            f"✅ Аккаунт {account_id} (Custom) успешно настроен!",
+            reply_markup=get_main_menu_keyboard()
         )
 
 
