@@ -11,7 +11,13 @@ from app.telegram_bot import init_bot, start_polling, send_notification
 from app.email_client import check_account_emails
 from app.storage import load_accounts
 from app.ai_client import init_openai
-from app.web_app import app as web_app
+# Импорт веб-приложения с обработкой ошибок
+try:
+    from app.web_app import app as web_app
+except Exception as e:
+    print(f"⚠️  Ошибка импорта веб-приложения: {e}")
+    print("   Веб-интерфейс будет отключен")
+    web_app = None
 
 # Интервал проверки почты (в секундах)
 CHECK_INTERVAL = 60  # 1 минута
@@ -117,17 +123,24 @@ async def main():
     web_enabled = os.getenv("WEB_ENABLED", "false").lower() == "true"
     web_port = int(os.getenv("WEB_PORT", "8000"))
     
-    if web_enabled:
+    if web_enabled and web_app is not None:
         print(f"🌐 Веб-интерфейс доступен на http://0.0.0.0:{web_port}")
         # Запускаем веб-приложение в отдельном процессе
         import threading
         import uvicorn
         
         def run_web():
-            uvicorn.run(web_app, host="0.0.0.0", port=web_port, log_level="info")
+            try:
+                uvicorn.run(web_app, host="0.0.0.0", port=web_port, log_level="info")
+            except Exception as e:
+                print(f"❌ Ошибка запуска веб-сервера: {e}")
+                import traceback
+                traceback.print_exc()
         
         web_thread = threading.Thread(target=run_web, daemon=True)
         web_thread.start()
+    elif web_enabled and web_app is None:
+        print("⚠️  WEB_ENABLED=true, но веб-приложение не загружено")
     else:
         print("💡 Для включения веб-интерфейса установите WEB_ENABLED=true")
     

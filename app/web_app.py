@@ -49,6 +49,8 @@ try:
     print(f"✅ Шаблоны загружены из: {template_dir_str}")
 except Exception as e:
     print(f"⚠️  Ошибка настройки шаблонов: {e}")
+    import traceback
+    traceback.print_exc()
     # Создаем заглушку, чтобы приложение не упало
     templates = None
 
