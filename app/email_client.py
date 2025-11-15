@@ -342,6 +342,7 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
             return mail
         
         mail = await loop.run_in_executor(None, imap_connect)
+        print(f"  ✅ Подключение к IMAP успешно")
         
         # Поиск непрочитанных писем (только новые, не старше 7 дней)
         from datetime import datetime, timedelta
