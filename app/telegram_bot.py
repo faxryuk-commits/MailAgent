@@ -78,6 +78,8 @@ def init_bot():
     print("   ✅ /reply зарегистрирован")
     dp.message.register(handle_emails, Command("emails"))
     print("   ✅ /emails зарегистрирован")
+    dp.message.register(handle_thread, Command("thread"))
+    print("   ✅ /thread зарегистрирован")
     dp.callback_query.register(handle_callback)
     print("   ✅ callback_query зарегистрирован")
     # Обработчик текстовых сообщений для FSM (должен быть последним)
@@ -332,9 +334,13 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
                 print(f"⚠️  Ошибка при отправке сообщения: {e}")
             return
         
-        # Генерируем варианты ответов через AI
+        # Получаем контекст переписки для более умных ответов
+        from app.email_client import get_email_thread
+        thread_emails = get_email_thread(email_data)
+        
+        # Генерируем варианты ответов через AI с учетом контекста переписки
         try:
-            reply_options = suggest_reply_options(email_data)
+            reply_options = suggest_reply_options(email_data, thread_emails)
         except Exception as e:
             print(f"⚠️  Ошибка при генерации вариантов ответов: {e}")
             reply_options = {"suggestions": [], "context": "Не удалось сгенерировать варианты ответов"}
@@ -356,8 +362,12 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         ))
         
         # Формируем сообщение
+        thread_info = ""
+        if len(thread_emails) > 1:
+            thread_info = f"\n📬 В цепочке: {len(thread_emails)} писем (используйте `/thread {local_id}` для просмотра)\n"
+        
         message_text = (
-            f"💬 Ответ на письмо\n\n"
+            f"💬 Ответ на письмо{thread_info}\n"
             f"📧 От: {email_data.get('from', 'Неизвестно')}\n"
             f"📝 Тема: {email_data.get('subject', 'Без темы')}\n\n"
             f"💡 {reply_options.get('context', 'Выберите вариант ответа или напишите свой')}\n\n"
@@ -900,6 +910,65 @@ async def handle_emails(message: types.Message, **kwargs):
         f"`/emails newsletter` - рассылки\n"
         f"`/emails today` - за сегодня"
     )
+    
+    await message.answer(result_text, parse_mode="Markdown")
+
+
+@check_owner
+async def handle_thread(message: types.Message, **kwargs):
+    """Обработчик команды /thread <ID> - показывает всю цепочку писем."""
+    from app.email_client import get_email_from_cache, get_email_thread
+    
+    text = message.text.strip()
+    parts = text.split()
+    
+    if len(parts) < 2:
+        await message.answer(
+            "📝 Правильный формат: `/thread <ID>`\n\n"
+            "Пример: `/thread 1-1234567890`\n\n"
+            "Покажет всю цепочку писем с этим письмом.",
+            parse_mode="Markdown"
+        )
+        return
+    
+    local_id = parts[1]
+    email_data = get_email_from_cache(local_id)
+    
+    if not email_data:
+        await message.answer(f"❌ Письмо с ID `{local_id}` не найдено в кэше.", parse_mode="Markdown")
+        return
+    
+    # Получаем всю цепочку писем
+    thread_emails = get_email_thread(email_data)
+    
+    if len(thread_emails) == 1:
+        await message.answer(
+            f"📧 Это письмо не является частью цепочки.\n\n"
+            f"От: {email_data.get('from', 'Неизвестно')}\n"
+            f"Тема: {email_data.get('subject', 'Без темы')}\n"
+            f"📅 {email_data.get('date', '')}\n\n"
+            f"📝 {email_data.get('summary', 'Нет резюме')}"
+        )
+        return
+    
+    # Формируем сообщение с цепочкой
+    result_text = f"📬 **Цепочка писем** ({len(thread_emails)} писем)\n\n"
+    result_text += f"📝 Тема: {email_data.get('subject', 'Без темы')}\n\n"
+    result_text += "---\n\n"
+    
+    for i, thread_email in enumerate(thread_emails, 1):
+        priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(
+            thread_email.get('priority', 'medium'), '🟡'
+        )
+        
+        result_text += (
+            f"**{i}. {priority_emoji}** {thread_email.get('from', 'Неизвестно')}\n"
+            f"📅 {thread_email.get('date', '')}\n"
+            f"📝 {thread_email.get('summary', 'Нет резюме')[:100]}...\n"
+            f"ID: `{thread_email.get('local_id', '')}`\n\n"
+        )
+    
+    result_text += "💡 Используйте `/reply <ID> <текст>` для ответа на любое письмо из цепочки."
     
     await message.answer(result_text, parse_mode="Markdown")
 

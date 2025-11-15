@@ -286,12 +286,13 @@ def analyze_email_priority_and_category(email_data: dict) -> dict:
         }
 
 
-def suggest_reply_options(email_data: dict) -> dict:
+def suggest_reply_options(email_data: dict, thread_context: list = None) -> dict:
     """
-    Генерирует варианты ответов на письмо через AI.
+    Генерирует варианты ответов на письмо через AI с учетом контекста переписки.
     
     Args:
         email_data: Данные письма (from, subject, body, summary)
+        thread_context: Список предыдущих писем из цепочки (опционально)
         
     Returns:
         Словарь с вариантами ответов и подсказками:
@@ -304,25 +305,39 @@ def suggest_reply_options(email_data: dict) -> dict:
     if not client:
         init_openai()
     
+    # Формируем контекст переписки
+    thread_info = ""
+    if thread_context and len(thread_context) > 1:
+        thread_info = "\n\n**Контекст переписки (предыдущие письма):**\n"
+        for i, prev_email in enumerate(thread_context[:-1], 1):  # Все кроме последнего (текущего)
+            thread_info += (
+                f"{i}. От: {prev_email.get('from', 'Неизвестно')}\n"
+                f"   Дата: {prev_email.get('date', '')}\n"
+                f"   Резюме: {prev_email.get('summary', '')}\n\n"
+            )
+        thread_info += "**Текущее письмо (на которое нужно ответить):**\n"
+    
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
                     "role": "system",
-                    "content": """Ты помощник для ответа на письма. Анализируй письмо и предлагай 3 коротких варианта ответа на русском языке.
+                    "content": """Ты помощник для ответа на письма. Анализируй письмо и контекст переписки (если есть), и предлагай 3 коротких варианта ответа на русском языке.
 Варианты должны быть разными по тону: один вежливый и формальный, один дружелюбный, один краткий.
+Если есть контекст переписки, учитывай его при генерации ответов.
 Также дай подсказку, что пользователь может написать свой ответ."""
                 },
                 {
                     "role": "user",
-                    "content": f"""Письмо:
+                    "content": f"""{thread_info}Письмо:
 От: {email_data.get('from', 'Неизвестно')}
 Тема: {email_data.get('subject', 'Без темы')}
 Резюме: {email_data.get('summary', '')}
 Текст (первые 500 символов): {email_data.get('body', '')[:500]}
 
 Предложи 3 варианта коротких ответов (по 1-2 предложения каждый) и подсказку.
+Учитывай контекст переписки, если он есть.
 Ответ в формате JSON:
 {{
     "suggestions": ["вариант 1", "вариант 2", "вариант 3"],

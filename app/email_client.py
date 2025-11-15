@@ -18,6 +18,76 @@ from app.ai_client import summarize_email, analyze_email_priority_and_category
 # Кэш писем в памяти: {local_id: email_data}
 EMAIL_CACHE: Dict[str, dict] = {}
 
+# Индекс цепочек писем: {thread_id: [local_id1, local_id2, ...]}
+THREAD_INDEX: Dict[str, List[str]] = {}
+
+
+def get_thread_id(subject: str, from_addr: str) -> str:
+    """
+    Генерирует thread_id для группировки писем по теме.
+    Убирает Re:, Fwd:, и другие префиксы для нормализации темы.
+    """
+    if not subject:
+        return f"no-subject-{from_addr[:20]}"
+    
+    # Нормализуем тему: убираем Re:, Fwd:, и т.д.
+    normalized_subject = subject.lower().strip()
+    
+    # Убираем префиксы
+    prefixes = ["re:", "fwd:", "fw:", "aw:", "vs:"]
+    for prefix in prefixes:
+        if normalized_subject.startswith(prefix):
+            normalized_subject = normalized_subject[len(prefix):].strip()
+    
+    # Берем первые 50 символов нормализованной темы
+    thread_key = normalized_subject[:50]
+    
+    # Добавляем отправителя для уникальности (если тема пустая)
+    if not thread_key:
+        thread_key = from_addr[:30]
+    
+    return thread_key
+
+
+def get_thread_emails(thread_id: str) -> List[dict]:
+    """
+    Получает все письма из одной цепочки (thread).
+    
+    Args:
+        thread_id: ID цепочки
+        
+    Returns:
+        Список писем, отсортированных по дате (старые первыми)
+    """
+    if thread_id not in THREAD_INDEX:
+        return []
+    
+    local_ids = THREAD_INDEX[thread_id]
+    emails = [EMAIL_CACHE.get(local_id) for local_id in local_ids if local_id in EMAIL_CACHE]
+    
+    # Фильтруем None и сортируем по дате (старые первыми)
+    emails = [e for e in emails if e is not None]
+    emails.sort(key=lambda x: x.get('date_raw', ''))
+    
+    return emails
+
+
+def get_email_thread(email_data: dict) -> List[dict]:
+    """
+    Получает всю цепочку писем для указанного письма.
+    
+    Args:
+        email_data: Данные письма
+        
+    Returns:
+        Список всех писем из цепочки
+    """
+    thread_id = email_data.get('thread_id')
+    if not thread_id:
+        return [email_data]  # Если нет thread_id, возвращаем только это письмо
+    
+    return get_thread_emails(thread_id)
+
 
 def decode_mime_words(s):
     """Декодирует MIME-заголовки."""
@@ -228,6 +298,9 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
                     temp_email_data
                 )
                 
+                # Генерация thread_id для группировки писем
+                thread_id = get_thread_id(subject, from_addr)
+                
                 # Сохранение в кэш с приоритетом и категорией
                 email_data = {
                     "local_id": local_id,
@@ -241,11 +314,18 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
                     "priority": priority_data.get("priority", "medium"),
                     "category": priority_data.get("category", "work"),
                     "priority_reason": priority_data.get("reason", ""),
+                    "thread_id": thread_id,  # ID цепочки для группировки
                     "original_msg": msg
                 }
                 
                 EMAIL_CACHE[local_id] = email_data
                 new_emails.append(email_data)
+                
+                # Добавляем в индекс цепочек
+                if thread_id not in THREAD_INDEX:
+                    THREAD_INDEX[thread_id] = []
+                if local_id not in THREAD_INDEX[thread_id]:
+                    THREAD_INDEX[thread_id].append(local_id)
                 
                 # Помечаем письмо как прочитанное, чтобы не обрабатывать его снова
                 def mark_as_read():
