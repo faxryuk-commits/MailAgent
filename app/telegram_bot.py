@@ -742,11 +742,13 @@ async def handle_emails(message: types.Message, **kwargs):
         elif filter_value == "today":
             from datetime import datetime, timedelta
             today = datetime.now().date()
-            all_emails = [
-                e for e in all_emails 
-                if e.get('date_raw') and 
-                datetime.strptime(e.get('date_raw', '').split(',')[0] if ',' in e.get('date_raw', '') else e.get('date_raw', ''), '%d %b %Y').date() == today
-            ]
+            filtered_emails = []
+            for e in all_emails:
+                date_str = e.get('date', '')
+                # Простая проверка: если в дате есть "сегодня" или "только что" или "X мин/час назад"
+                if any(word in date_str.lower() for word in ['сегодня', 'только что', 'мин', 'час', 'сек']):
+                    filtered_emails.append(e)
+            all_emails = filtered_emails
             filter_type = "date"
     
     if not all_emails:
