@@ -505,15 +505,20 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
                     await telegram_notify_func(message, local_id, priority_data.get("category"))
                 
             except Exception as e:
-                print(f"Ошибка при обработке письма {email_id}: {e}")
+                print(f"  ❌ Ошибка при обработке письма {email_id}: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
         
+        # Закрываем соединение
         def imap_close():
             mail.close()
             mail.logout()
         await loop.run_in_executor(None, imap_close)
+        print(f"  ✅ Проверка аккаунта {account_id} завершена. Обработано писем: {len(new_emails)}")
         
     except imaplib.IMAP4.error as e:
+        print(f"  ❌ Ошибка IMAP для аккаунта {account_id}: {e}")
         error_msg = str(e).lower()
         if "authentication" in error_msg or "login" in error_msg:
             if telegram_notify_func:
@@ -528,6 +533,9 @@ async def check_account_emails(account_id: int, telegram_notify_func=None) -> Li
             if telegram_notify_func:
                 await telegram_notify_func(f"Ошибка IMAP для аккаунта {account_id}: {str(e)}")
     except Exception as e:
+        print(f"  ❌ Общая ошибка при проверке аккаунта {account_id}: {e}")
+        import traceback
+        traceback.print_exc()
         if telegram_notify_func:
             await telegram_notify_func(f"Ошибка при проверке почты (аккаунт {account_id}): {str(e)}")
     
