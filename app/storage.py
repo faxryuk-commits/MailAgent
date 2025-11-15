@@ -44,6 +44,11 @@ def get_account(account_id: int) -> Optional[dict]:
 
 def save_account(account_id: int, account_data: dict) -> None:
     """Сохраняет настройки одного аккаунта."""
+    # Защита от сохранения пустых данных
+    if not account_data or not any(account_data.values()):
+        print(f"⚠️  Попытка сохранить пустой аккаунт {account_id}! Пропускаем сохранение.")
+        return
+    
     accounts = load_accounts()
     # Сохраняем существующие данные других аккаунтов
     accounts[str(account_id)] = account_data
