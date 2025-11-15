@@ -1243,6 +1243,64 @@ async def handle_stats(message: types.Message, **kwargs):
 
 
 @check_owner
+async def handle_status(message: types.Message, **kwargs):
+    """Обработчик команды /status - показывает статус почтовых аккаунтов."""
+    from app.email_client import check_account_status
+    from app.storage import load_accounts
+    
+    accounts = load_accounts()
+    
+    result_text = "📊 **Статус почтовых аккаунтов**\n\n"
+    
+    # Проверяем аккаунт 1
+    status1 = await check_account_status(1)
+    if status1["configured"]:
+        if status1["connected"]:
+            result_text += f"✅ **Аккаунт 1** - Активен\n"
+            result_text += f"📧 {status1['email']}\n\n"
+        else:
+            result_text += f"❌ **Аккаунт 1** - Ошибка подключения\n"
+            result_text += f"📧 {status1['email']}\n"
+            result_text += f"⚠️ {status1['error']}\n\n"
+    else:
+        result_text += f"⚪ **Аккаунт 1** - Не настроен\n\n"
+    
+    # Проверяем аккаунт 2
+    status2 = await check_account_status(2)
+    if status2["configured"]:
+        if status2["connected"]:
+            result_text += f"✅ **Аккаунт 2** - Активен\n"
+            result_text += f"📧 {status2['email']}\n\n"
+        else:
+            result_text += f"❌ **Аккаунт 2** - Ошибка подключения\n"
+            result_text += f"📧 {status2['email']}\n"
+            result_text += f"⚠️ {status2['error']}\n\n"
+    else:
+        result_text += f"⚪ **Аккаунт 2** - Не настроен\n\n"
+    
+    # Общая статистика
+    from app.email_client import EMAIL_CACHE
+    total_emails = len(EMAIL_CACHE)
+    result_text += f"📬 **Писем в кэше:** {total_emails}\n\n"
+    
+    # Подсказки
+    if not status1["connected"] and not status2["connected"]:
+        result_text += (
+            "💡 **Что делать:**\n"
+            "• Используйте `/start` для настройки аккаунтов\n"
+            "• Проверьте правильность паролей\n"
+            "• Для Gmail может потребоваться App Password"
+        )
+    elif status1["connected"] or status2["connected"]:
+        result_text += (
+            "✅ Аккаунты работают! Бот проверяет почту каждые 60 секунд.\n\n"
+            "💡 Используйте `/emails` для просмотра писем"
+        )
+    
+    await message.answer(result_text, parse_mode="Markdown")
+
+
+@check_owner
 async def handle_reply(message: types.Message, **kwargs):
     """Обработчик команды /reply <ID> <текст>."""
     text = message.text.strip()
