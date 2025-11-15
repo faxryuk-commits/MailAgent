@@ -711,7 +711,6 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
 
 
 @check_owner
-@check_owner
 async def handle_emails(message: types.Message, **kwargs):
     """Обработчик команды /emails [фильтр]."""
     from app.email_client import EMAIL_CACHE
