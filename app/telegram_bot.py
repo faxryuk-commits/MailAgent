@@ -330,12 +330,18 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
             else:
                 await callback.message.answer(f"❌ Ошибка при отправке: {msg}")
         else:
-            await callback.answer("❌ Вариант не найден", show_alert=True)
+            try:
+                await callback.answer("❌ Вариант не найден", show_alert=True)
+            except Exception as e:
+                print(f"⚠️  Ошибка при ответе на callback: {e}")
     
     elif data.startswith("custom_reply:"):
         # Пользователь хочет написать свой ответ
         local_id = data.split(":", 1)[1]
-        await callback.answer()
+        try:
+            await callback.answer()
+        except Exception as e:
+            print(f"⚠️  Ошибка при ответе на callback: {e}")
         
         email_data = get_email_from_cache(local_id)
         if not email_data:
