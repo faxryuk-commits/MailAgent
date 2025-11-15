@@ -6,55 +6,68 @@ import os
 from pathlib import Path
 
 # Определяем корневую директорию проекта
-base_dir = Path(__file__).parent.parent
-base_dir_str = str(base_dir.absolute())
+# На Vercel __file__ будет указывать на /var/task/api/index.py
+current_file = Path(__file__).resolve()
+base_dir = current_file.parent.parent
+base_dir_str = str(base_dir)
 
 # Добавляем путь к приложению
 if base_dir_str not in sys.path:
     sys.path.insert(0, base_dir_str)
 
+# Также добавляем текущую директорию
+cwd = os.getcwd()
+if cwd not in sys.path:
+    sys.path.insert(0, cwd)
+
 # Устанавливаем PYTHONPATH
-os.environ['PYTHONPATH'] = base_dir_str
+os.environ['PYTHONPATH'] = f"{base_dir_str}:{cwd}"
 
-# Для отладки (будет видно в логах Vercel)
-print(f"Python version: {sys.version}")
+# Для отладки
+print("=" * 50)
+print("🚀 Инициализация Vercel serverless function")
+print("=" * 50)
+print(f"Python version: {sys.version.split()[0]}")
+print(f"Current file: {current_file}")
 print(f"Base directory: {base_dir_str}")
-print(f"Current working directory: {os.getcwd()}")
+print(f"Working directory: {cwd}")
 print(f"PYTHONPATH: {os.environ.get('PYTHONPATH')}")
-print(f"sys.path: {sys.path[:3]}...")  # Первые 3 элемента
+print(f"sys.path (first 3): {sys.path[:3]}")
 
-# Подавляем предупреждения при импорте
+# Проверка файлов
+app_web_app = base_dir / "app" / "web_app.py"
+app_init = base_dir / "app" / "__init__.py"
+print(f"\n📁 Проверка файлов:")
+print(f"   app/web_app.py: {app_web_app.exists()} ({app_web_app})")
+print(f"   app/__init__.py: {app_init.exists()} ({app_init})")
+
+# Подавляем предупреждения
 import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore")
 
 try:
-    # Импортируем FastAPI приложение
-    print("🔄 Импорт app.web_app...")
+    print("\n🔄 Импорт app.web_app...")
     from app.web_app import app
     
     # Vercel для Python ожидает ASGI приложение
     handler = app
     print("✅ FastAPI app успешно импортирован")
-    print(f"✅ BACKEND_URL: {os.getenv('BACKEND_URL', 'не установлен')}")
-except ImportError as e:
-    # Детальная информация об ошибке импорта
-    import traceback
-    print("❌ Ошибка импорта:")
-    print(f"   Тип ошибки: {type(e).__name__}")
-    print(f"   Сообщение: {str(e)}")
-    print(f"   Модуль: {getattr(e, 'name', 'неизвестно')}")
-    print("\n📋 Traceback:")
-    traceback.print_exc()
-    print("\n📁 Проверка файлов:")
-    print(f"   app/web_app.py существует: {Path(base_dir / 'app' / 'web_app.py').exists()}")
-    print(f"   app/__init__.py существует: {Path(base_dir / 'app' / '__init__.py').exists()}")
-    raise
+    print(f"✅ BACKEND_URL: {os.getenv('BACKEND_URL', 'НЕ УСТАНОВЛЕН')}")
+    print("=" * 50)
 except Exception as e:
-    # Другие ошибки
+    # Детальная информация об ошибке
     import traceback
-    print("❌ Неожиданная ошибка:")
-    print(f"   Тип: {type(e).__name__}")
-    print(f"   Сообщение: {str(e)}")
-    print("\n📋 Traceback:")
+    print("\n" + "=" * 50)
+    print("❌ КРИТИЧЕСКАЯ ОШИБКА ИМПОРТА")
+    print("=" * 50)
+    print(f"Тип ошибки: {type(e).__name__}")
+    print(f"Сообщение: {str(e)}")
+    if hasattr(e, 'name'):
+        print(f"Модуль: {e.name}")
+    print("\n📋 Полный traceback:")
     traceback.print_exc()
+    print("\n📁 Дополнительная информация:")
+    print(f"   sys.path: {sys.path}")
+    print(f"   PYTHONPATH: {os.environ.get('PYTHONPATH')}")
+    print("=" * 50)
     raise
