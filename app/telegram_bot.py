@@ -800,22 +800,35 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
             # Продолжаем обработку
         
         if provider == "gmail":
+            print(f"🔧 Настройка Gmail для аккаунта {account_id}")
             await state.update_data(account_id=account_id, provider="gmail")
+            print(f"✅ account_id={account_id} сохранен в state")
+            
             await state.set_state(SetupStates.gmail_user)
+            print(f"✅ Состояние установлено: gmail_user")
             
             # Проверяем, настроен ли OAuth2
-            from app.oauth_client import CLIENT_ID, CLIENT_SECRET
-            if CLIENT_ID and CLIENT_SECRET:
+            try:
+                from app.oauth_client import CLIENT_ID, CLIENT_SECRET
+                oauth_available = bool(CLIENT_ID and CLIENT_SECRET)
+                print(f"🔍 OAuth2 доступен: {oauth_available}")
+            except ImportError as e:
+                print(f"⚠️  Ошибка импорта oauth_client: {e}")
+                oauth_available = False
+            
+            if oauth_available:
                 await callback.message.answer(
                     f"📧 Настройка аккаунта {account_id} (Gmail)\n\n"
                     "Введите ваш email адрес для OAuth2 авторизации:"
                 )
+                print(f"✅ Запрос email для OAuth2 отправлен")
             else:
                 await callback.message.answer(
                     f"📧 Настройка аккаунта {account_id} (Gmail)\n\n"
                     "⚠️ OAuth2 не настроен. Используется авторизация по паролю.\n"
                     "Введите ваш email адрес:"
                 )
+                print(f"✅ Запрос email для пароля отправлен")
         elif provider == "custom":
             await state.update_data(account_id=account_id, provider="custom")
             await state.set_state(SetupStates.custom_imap_host)
@@ -1103,52 +1116,96 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
         return
     
     current_state = await state.get_state()
+    print(f"🔍 Текущее состояние FSM: {current_state}")
+    print(f"🔍 Ожидаемое состояние gmail_user: {SetupStates.gmail_user.state}")
     
     if current_state == SetupStates.gmail_user.state:
-        email = message.text.strip()
-        await state.update_data(imap_user=email)
-        
-        # Проверяем, настроен ли OAuth2
-        from app.oauth_client import CLIENT_ID, CLIENT_SECRET, get_authorization_url
-        data = await state.get_data()
-        account_id = data["account_id"]
-        
-        if CLIENT_ID and CLIENT_SECRET:
-            # Используем OAuth2
+        try:
+            email = message.text.strip()
+            print(f"📧 Получен email для настройки: {email}")
+            
+            if not email or "@" not in email:
+                await message.answer("❌ Пожалуйста, введите корректный email адрес.")
+                return
+            
+            await state.update_data(imap_user=email)
+            print(f"✅ Email сохранен в state: {email}")
+            
+            # Получаем account_id из state
+            data = await state.get_data()
+            account_id = data.get("account_id")
+            print(f"📋 Account ID из state: {account_id}")
+            
+            if not account_id:
+                await message.answer("❌ Ошибка: не найден ID аккаунта. Попробуйте начать настройку заново через /start.")
+                await state.clear()
+                return
+            
+            # Проверяем, настроен ли OAuth2
             try:
-                auth_url = get_authorization_url(account_id, email)
-                await state.set_state(SetupStates.gmail_oauth_code)
-                await message.answer(
-                    f"🔐 Авторизация через Google OAuth2\n\n"
-                    f"📋 Инструкция:\n\n"
-                    f"1️⃣ Откройте эту ссылку в браузере:\n"
-                    f"🔗 {auth_url}\n\n"
-                    f"2️⃣ Войдите в Google и разрешите доступ\n"
-                    f"3️⃣ После авторизации вы будете перенаправлены на страницу с ошибкой - это нормально!\n"
-                    f"4️⃣ Посмотрите на адресную строку браузера\n"
-                    f"5️⃣ Найдите параметр `code=` в URL\n"
-                    f"6️⃣ Скопируйте весь код после `code=` (до следующего `&` или до конца)\n"
-                    f"7️⃣ Отправьте скопированный код боту\n\n"
-                    f"💡 Пример кода: `4/0AeanS2AbCdEf...` (длинная строка)\n\n"
-                    f"❓ Если не получается, отправьте 'skip' для использования пароля"
-                )
-            except Exception as e:
-                await message.answer(
-                    f"❌ Ошибка при создании OAuth2 ссылки: {e}\n\n"
-                    "Попробуем использовать пароль вместо этого."
-                )
+                from app.oauth_client import CLIENT_ID, CLIENT_SECRET, get_authorization_url
+                print(f"🔍 OAuth2 проверка: CLIENT_ID={'установлен' if CLIENT_ID else 'не установлен'}, CLIENT_SECRET={'установлен' if CLIENT_SECRET else 'не установлен'}")
+            except ImportError as e:
+                print(f"⚠️  Ошибка импорта oauth_client: {e}")
+                CLIENT_ID = None
+                CLIENT_SECRET = None
+                get_authorization_url = None
+            
+            if CLIENT_ID and CLIENT_SECRET and get_authorization_url:
+                # Используем OAuth2
+                try:
+                    print(f"🔐 Создание OAuth2 ссылки для аккаунта {account_id}, email {email}...")
+                    auth_url = get_authorization_url(account_id, email)
+                    print(f"✅ OAuth2 ссылка создана: {auth_url[:50]}...")
+                    
+                    await state.set_state(SetupStates.gmail_oauth_code)
+                    print(f"✅ Состояние изменено на gmail_oauth_code")
+                    
+                    await message.answer(
+                        f"🔐 Авторизация через Google OAuth2\n\n"
+                        f"📋 Инструкция:\n\n"
+                        f"1️⃣ Откройте эту ссылку в браузере:\n"
+                        f"🔗 {auth_url}\n\n"
+                        f"2️⃣ Войдите в Google и разрешите доступ\n"
+                        f"3️⃣ После авторизации вы будете перенаправлены на страницу с ошибкой - это нормально!\n"
+                        f"4️⃣ Посмотрите на адресную строку браузера\n"
+                        f"5️⃣ Найдите параметр `code=` в URL\n"
+                        f"6️⃣ Скопируйте весь код после `code=` (до следующего `&` или до конца)\n"
+                        f"7️⃣ Отправьте скопированный код боту\n\n"
+                        f"💡 Пример кода: `4/0AeanS2AbCdEf...` (длинная строка)\n\n"
+                        f"❓ Если не получается, отправьте 'skip' для использования пароля"
+                    )
+                    print(f"✅ Сообщение с OAuth2 инструкцией отправлено")
+                except Exception as e:
+                    print(f"❌ Ошибка при создании OAuth2 ссылки: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    await message.answer(
+                        f"❌ Ошибка при создании OAuth2 ссылки: {e}\n\n"
+                        "Попробуем использовать пароль вместо этого."
+                    )
+                    await state.set_state(SetupStates.gmail_pass)
+                    await message.answer(
+                        "Введите пароль для Gmail:\n\n"
+                        "💡 Сначала попробуем обычный пароль. Если не подойдет, попросим App Password."
+                    )
+            else:
+                # Fallback на пароль
+                print(f"💡 OAuth2 не настроен, используем пароль")
                 await state.set_state(SetupStates.gmail_pass)
                 await message.answer(
                     "Введите пароль для Gmail:\n\n"
                     "💡 Сначала попробуем обычный пароль. Если не подойдет, попросим App Password."
                 )
-        else:
-            # Fallback на пароль
-            await state.set_state(SetupStates.gmail_pass)
-            await message.answer(
-                "Введите пароль для Gmail:\n\n"
-                "💡 Сначала попробуем обычный пароль. Если не подойдет, попросим App Password."
-            )
+                print(f"✅ Запрос пароля отправлен")
+        except Exception as e:
+            print(f"❌ Критическая ошибка в обработке gmail_user: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                await message.answer(f"❌ Произошла ошибка: {e}\n\nПопробуйте начать настройку заново через /start.")
+            except:
+                pass
     
     elif current_state == SetupStates.gmail_oauth_code.state:
         # Обработка OAuth2 кода
