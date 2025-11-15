@@ -130,6 +130,77 @@ def search_emails(query: str, limit: int = 20) -> List[dict]:
     return results[:limit]
 
 
+def get_email_statistics() -> dict:
+    """
+    Собирает статистику по всем письмам.
+    
+    Returns:
+        Словарь со статистикой:
+        {
+            "total": общее количество писем,
+            "by_category": {category: count},
+            "by_priority": {priority: count},
+            "by_time": {"today": count, "yesterday": count, "week": count},
+            "top_senders": [{"from": email, "count": count}],
+            "threads_count": количество цепочек
+        }
+    """
+    from datetime import datetime, timedelta
+    
+    stats = {
+        "total": len(EMAIL_CACHE),
+        "by_category": {},
+        "by_priority": {},
+        "by_time": {"today": 0, "yesterday": 0, "week": 0},
+        "top_senders": {},
+        "threads_count": len(THREAD_INDEX)
+    }
+    
+    now = datetime.now()
+    today_start = datetime(now.year, now.month, now.day)
+    yesterday_start = today_start - timedelta(days=1)
+    week_start = today_start - timedelta(days=7)
+    
+    for email_data in EMAIL_CACHE.values():
+        # Статистика по категориям
+        category = email_data.get('category', 'work')
+        stats["by_category"][category] = stats["by_category"].get(category, 0) + 1
+        
+        # Статистика по приоритетам
+        priority = email_data.get('priority', 'medium')
+        stats["by_priority"][priority] = stats["by_priority"].get(priority, 0) + 1
+        
+        # Статистика по времени
+        date_raw = email_data.get('date_raw', '')
+        if date_raw:
+            try:
+                # Пытаемся распарсить дату из date_raw
+                email_date = parsedate_to_datetime(date_raw)
+                if email_date >= today_start:
+                    stats["by_time"]["today"] += 1
+                elif email_date >= yesterday_start:
+                    stats["by_time"]["yesterday"] += 1
+                if email_date >= week_start:
+                    stats["by_time"]["week"] += 1
+            except:
+                pass
+        
+        # Статистика по отправителям
+        from_addr = email_data.get('from', 'Неизвестно')
+        stats["top_senders"][from_addr] = stats["top_senders"].get(from_addr, 0) + 1
+    
+    # Сортируем отправителей по количеству писем
+    top_senders_list = sorted(
+        stats["top_senders"].items(),
+        key=lambda x: x[1],
+        reverse=True
+    )[:10]  # Топ-10 отправителей
+    
+    stats["top_senders"] = [{"from": email, "count": count} for email, count in top_senders_list]
+    
+    return stats
+
+
 def decode_mime_words(s):
     """Декодирует MIME-заголовки."""
     if s is None:
