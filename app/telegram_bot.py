@@ -716,7 +716,9 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
 
 💡 Все ответы автоматически улучшаются через AI и переводятся в деловой английский.
 """
-        await callback.message.answer(help_text, parse_mode="Markdown")
+        keyboard = InlineKeyboardBuilder()
+        keyboard.add(InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:main"))
+        await callback.message.edit_text(help_text, reply_markup=keyboard.as_markup(), parse_mode="Markdown")
         return
     
     if data.startswith("setup:"):
