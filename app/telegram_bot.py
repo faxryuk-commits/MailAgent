@@ -1005,10 +1005,13 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
 @check_owner
 async def handle_voice_message(message: types.Message, state: FSMContext, **kwargs):
     """Обработчик голосовых сообщений - транскрибирует и обрабатывает через ИИ."""
+    print(f"🎤 handle_voice_message вызван. Voice: {message.voice is not None}, Text: {message.text is not None}")
+    
     # Проверяем, что это голосовое сообщение
     if not message.voice:
         # Если это не голосовое сообщение, пропускаем обработку
         # (это позволит другим обработчикам обработать сообщение)
+        print(f"⏭️  handle_voice_message: не голосовое сообщение, пропускаем")
         return
     
     await message.answer("🎤 Обрабатываю голосовое сообщение...")
@@ -1058,11 +1061,16 @@ async def handle_voice_message(message: types.Message, state: FSMContext, **kwar
 
 async def handle_text_message(message: types.Message, state: FSMContext, **kwargs):
     """Обработчик текстовых сообщений (для FSM и ИИ-обработки)."""
+    print(f"📨 handle_text_message вызван. Текст: {message.text[:50] if message.text else 'None'}")
+    print(f"👤 User ID: {message.from_user.id}, OWNER: {OWNER_TELEGRAM_ID}")
+    
     if message.from_user.id != OWNER_TELEGRAM_ID:
+        print(f"⚠️  Доступ запрещен для user_id={message.from_user.id}")
         return
     
     # Пропускаем, если это команда (она уже обработана другими обработчиками)
     if message.text and message.text.startswith('/'):
+        print(f"⏭️  Пропущена команда: {message.text}")
         return
     
     # Проверяем, не пишет ли пользователь свой ответ на письмо
@@ -1118,8 +1126,14 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
     current_state = await state.get_state()
     print(f"🔍 Текущее состояние FSM: {current_state}")
     print(f"🔍 Ожидаемое состояние gmail_user: {SetupStates.gmail_user.state}")
+    print(f"🔍 Состояния совпадают: {current_state == SetupStates.gmail_user.state}")
+    
+    # Получаем все данные из state для отладки
+    state_data = await state.get_data()
+    print(f"📋 Данные в state: {state_data}")
     
     if current_state == SetupStates.gmail_user.state:
+        print(f"✅ Ветка gmail_user активирована!")
         try:
             email = message.text.strip()
             print(f"📧 Получен email для настройки: {email}")
