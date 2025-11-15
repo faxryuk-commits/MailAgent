@@ -5,7 +5,7 @@ import os
 import asyncio
 from typing import Optional
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command, F
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -92,8 +92,8 @@ def init_bot():
     print("   ✅ /status зарегистрирован")
     dp.callback_query.register(handle_callback)
     print("   ✅ callback_query зарегистрирован")
-    # Обработчик голосовых сообщений
-    dp.message.register(handle_voice_message, F.voice)
+    # Обработчик голосовых сообщений (регистрируем перед текстовыми, чтобы перехватить голосовые)
+    dp.message.register(handle_voice_message)
     print("   ✅ voice messages зарегистрирован")
     # Обработчик текстовых сообщений для FSM (должен быть последним)
     dp.message.register(handle_text_message)
@@ -992,7 +992,10 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
 @check_owner
 async def handle_voice_message(message: types.Message, state: FSMContext, **kwargs):
     """Обработчик голосовых сообщений - транскрибирует и обрабатывает через ИИ."""
+    # Проверяем, что это голосовое сообщение
     if not message.voice:
+        # Если это не голосовое сообщение, пропускаем обработку
+        # (это позволит другим обработчикам обработать сообщение)
         return
     
     await message.answer("🎤 Обрабатываю голосовое сообщение...")
