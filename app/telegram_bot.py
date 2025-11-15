@@ -659,7 +659,9 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
                 "💡 Используйте `/emails` для просмотра писем"
             )
         
-        await callback.message.answer(result_text, parse_mode="Markdown")
+        keyboard = InlineKeyboardBuilder()
+        keyboard.add(InlineKeyboardButton(text="🏠 Главное меню", callback_data="menu:main"))
+        await callback.message.edit_text(result_text, reply_markup=keyboard.as_markup(), parse_mode="Markdown")
         return
     
     if data == "show_help":
