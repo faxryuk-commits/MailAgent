@@ -15,7 +15,10 @@ from aiogram.exceptions import TelegramBadRequest
 
 from app.storage import save_account, get_account, load_accounts
 from app.email_client import send_email_smtp, get_email_from_cache, test_imap_connection
-from app.ai_client import polish_reply, understand_user_intent, generate_friendly_response, suggest_reply_options
+from app.ai_client import (
+    polish_reply, understand_user_intent, generate_friendly_response, suggest_reply_options,
+    understand_user_intent_with_email_access, analyze_emails_by_topic
+)
 from app.oauth_client import get_authorization_url, exchange_code_for_tokens, refresh_access_token
 
 # Глобальные переменные для бота
@@ -89,6 +92,9 @@ def init_bot():
     print("   ✅ /status зарегистрирован")
     dp.callback_query.register(handle_callback)
     print("   ✅ callback_query зарегистрирован")
+    # Обработчик голосовых сообщений
+    dp.message.register(handle_voice_message, types.ContentType.VOICE)
+    print("   ✅ voice messages зарегистрирован")
     # Обработчик текстовых сообщений для FSM (должен быть последним)
     dp.message.register(handle_text_message)
     print("   ✅ text messages зарегистрирован")
@@ -983,8 +989,65 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext, **kwargs):
         )
 
 
+@check_owner
+async def handle_voice_message(message: types.Message, state: FSMContext, **kwargs):
+    """Обработчик голосовых сообщений - транскрибирует и обрабатывает через ИИ."""
+    if not message.voice:
+        return
+    
+    await message.answer("🎤 Обрабатываю голосовое сообщение...")
+    
+    try:
+        # Скачиваем голосовое сообщение
+        file_info = await bot.get_file(message.voice.file_id)
+        file_path = file_info.file_path
+        
+        # Скачиваем файл
+        import tempfile
+        import os
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.ogg') as tmp_file:
+            await bot.download_file(file_path, tmp_file.name)
+            tmp_path = tmp_file.name
+        
+        # Транскрибируем через OpenAI Whisper
+        from app.ai_client import init_openai
+        init_openai()
+        from app.ai_client import client
+        
+        # Открываем файл для чтения в бинарном режиме
+        with open(tmp_path, 'rb') as audio_file:
+            # Whisper API требует файл с именем, поэтому используем NamedTemporaryFile
+            import io
+            audio_bytes = audio_file.read()
+            audio_io = io.BytesIO(audio_bytes)
+            audio_io.name = "voice.ogg"  # Указываем имя файла
+            
+            transcript = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_io,
+                language="ru"
+            )
+        
+        # Удаляем временный файл
+        os.unlink(tmp_path)
+        
+        transcribed_text = transcript.text
+        await message.answer(f"📝 Распознано: {transcribed_text}")
+        
+        # Обрабатываем транскрибированный текст как обычное сообщение
+        # Создаем временное сообщение с текстом
+        message.text = transcribed_text
+        await handle_text_message(message, state, **kwargs)
+        
+    except Exception as e:
+        print(f"Ошибка при обработке голосового сообщения: {e}")
+        import traceback
+        traceback.print_exc()
+        await message.answer("❌ Не удалось обработать голосовое сообщение. Попробуйте написать текстом.")
+
+
 async def handle_text_message(message: types.Message, state: FSMContext, **kwargs):
-    """Обработчик текстовых сообщений (для FSM)."""
+    """Обработчик текстовых сообщений (для FSM и ИИ-обработки)."""
     if message.from_user.id != OWNER_TELEGRAM_ID:
         return
     
@@ -1325,6 +1388,180 @@ async def handle_text_message(message: types.Message, state: FSMContext, **kwarg
             f"✅ Аккаунт {account_id} (Custom) успешно настроен!",
             reply_markup=get_main_menu_keyboard()
         )
+        return
+    
+    # Если не в процессе настройки - обрабатываем через ИИ
+    # Это позволяет боту понимать естественный язык и выполнять действия
+    current_state = await state.get_state()
+    if not current_state or current_state not in [
+        SetupStates.gmail_user.state,
+        SetupStates.gmail_oauth_code.state,
+        SetupStates.gmail_pass.state,
+        SetupStates.custom_imap_host.state,
+        SetupStates.custom_imap_user.state,
+        SetupStates.custom_imap_pass.state,
+        SetupStates.custom_smtp_host.state,
+        SetupStates.custom_smtp_port.state
+    ]:
+        # Обрабатываем запрос через ИИ
+        user_text = message.text.strip() if message.text else ""
+        if not user_text:
+            return
+        
+        await message.answer("🤔 Анализирую ваш запрос...")
+        
+        try:
+            # Понимаем намерение через ИИ
+            intent_result = understand_user_intent_with_email_access(user_text, current_state)
+            intent = intent_result.get("intent", "unknown")
+            action = intent_result.get("action", "answer_question")
+            parameters = intent_result.get("parameters", {})
+            ai_response = intent_result.get("response", "")
+            
+            # Выполняем действие в зависимости от намерения
+            if intent == "check_email":
+                # Проверяем почту прямо сейчас
+                await message.answer("📧 Проверяю почту...")
+                from app.email_client import check_account_emails
+                from app.storage import load_accounts
+                
+                accounts = load_accounts()
+                account_id = parameters.get("account_id")
+                
+                if account_id:
+                    # Проверяем конкретный аккаунт
+                    if str(account_id) in accounts:
+                        emails = await check_account_emails(account_id, telegram_notify_func=send_notification)
+                        if emails:
+                            await message.answer(f"✅ Найдено новых писем: {len(emails)}")
+                        else:
+                            await message.answer("📭 Новых писем нет.")
+                    else:
+                        await message.answer(f"❌ Аккаунт {account_id} не настроен.")
+                else:
+                    # Проверяем все аккаунты
+                    found_any = False
+                    for acc_id in ["1", "2"]:
+                        if acc_id in accounts:
+                            emails = await check_account_emails(int(acc_id), telegram_notify_func=send_notification)
+                            if emails:
+                                found_any = True
+                    
+                    if not found_any:
+                        await message.answer("📭 Новых писем нет во всех аккаунтах.")
+            
+            elif intent == "search":
+                # Поиск писем
+                query = parameters.get("query") or user_text
+                await message.answer(f"🔍 Ищу письма по запросу: {query}")
+                
+                from app.email_client import search_emails
+                results = search_emails(query, limit=20)
+                
+                if results:
+                    result_text = f"📧 Найдено писем: {len(results)}\n\n"
+                    for i, email_data in enumerate(results[:10], 1):
+                        result_text += (
+                            f"{i}. {email_data.get('from', 'Неизвестно')[:30]}\n"
+                            f"   📝 {email_data.get('subject', 'Без темы')[:40]}\n"
+                            f"   📅 {email_data.get('date', '')}\n"
+                            f"   ID: `{email_data.get('local_id', '')}`\n\n"
+                        )
+                    if len(results) > 10:
+                        result_text += f"... и еще {len(results) - 10} писем"
+                    
+                    await message.answer(result_text, parse_mode="Markdown")
+                else:
+                    await message.answer(f"📭 Писем по запросу '{query}' не найдено.")
+            
+            elif intent == "analyze":
+                # Анализ писем по теме
+                topic = parameters.get("topic") or parameters.get("query") or user_text
+                await message.answer(f"📊 Анализирую письма по теме: {topic}")
+                
+                from app.email_client import search_emails
+                emails = search_emails(topic, limit=20)
+                
+                if emails:
+                    analysis = analyze_emails_by_topic(emails, topic)
+                    await message.answer(analysis)
+                else:
+                    await message.answer(f"📭 Писем по теме '{topic}' не найдено для анализа.")
+            
+            elif intent == "stats":
+                # Показываем статистику
+                await message.answer("📊 Собираю статистику...")
+                
+                from app.email_client import get_email_statistics
+                stats = get_email_statistics()
+                
+                result_text = "📊 **Статистика по письмам**\n\n"
+                result_text += f"📧 **Всего писем:** {stats['total']}\n"
+                result_text += f"📬 **Цепочек переписки:** {stats['threads_count']}\n\n"
+                
+                if stats['total'] > 0:
+                    # По категориям
+                    result_text += "**По категориям:**\n"
+                    category_emoji = {
+                        "work": "💼", "personal": "👤", "newsletter": "📰", 
+                        "spam": "🗑️", "important": "⭐"
+                    }
+                    category_name = {
+                        "work": "Работа", "personal": "Личное", "newsletter": "Рассылка",
+                        "spam": "Спам", "important": "Важное"
+                    }
+                    for category, count in sorted(stats["by_category"].items(), key=lambda x: x[1], reverse=True):
+                        emoji = category_emoji.get(category, "📧")
+                        name = category_name.get(category, category)
+                        result_text += f"{emoji} {name}: {count}\n"
+                    
+                    result_text += "\n**По приоритетам:**\n"
+                    priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+                    priority_name = {"high": "Высокий", "medium": "Средний", "low": "Низкий"}
+                    for priority, count in sorted(stats["by_priority"].items(), key=lambda x: x[1], reverse=True):
+                        emoji = priority_emoji.get(priority, "🟡")
+                        name = priority_name.get(priority, priority)
+                        result_text += f"{emoji} {name}: {count}\n"
+                    
+                    result_text += "\n**По времени:**\n"
+                    result_text += f"📅 Сегодня: {stats['by_time']['today']}\n"
+                    result_text += f"📅 Вчера: {stats['by_time']['yesterday']}\n"
+                    result_text += f"📅 За неделю: {stats['by_time']['week']}\n"
+                
+                await message.answer(result_text, parse_mode="Markdown")
+            
+            elif intent == "question":
+                # Отвечаем на вопрос
+                if ai_response:
+                    await message.answer(ai_response)
+                else:
+                    # Генерируем ответ через ИИ
+                    from app.ai_client import generate_friendly_response
+                    response = generate_friendly_response(
+                        f"Пользователь задал вопрос: {user_text}. "
+                        "Нужно ответить дружелюбно и рассказать о возможностях бота."
+                    )
+                    await message.answer(response)
+            
+            else:
+                # Не поняли запрос
+                if ai_response:
+                    await message.answer(ai_response)
+                else:
+                    await message.answer(
+                        "🤔 Не совсем понял ваш запрос. Попробуйте:\n"
+                        "• 'Проверь почту' - проверить почту сейчас\n"
+                        "• 'Найди письма про инвестиции' - найти письма\n"
+                        "• 'Расскажи про проект' - проанализировать письма\n"
+                        "• 'Сколько писем?' - показать статистику\n"
+                        "• 'Что ты умеешь?' - узнать возможности"
+                    )
+        
+        except Exception as e:
+            print(f"Ошибка при обработке запроса через ИИ: {e}")
+            import traceback
+            traceback.print_exc()
+            await message.answer("❌ Произошла ошибка при обработке запроса. Попробуйте позже.")
 
 
 @check_owner
